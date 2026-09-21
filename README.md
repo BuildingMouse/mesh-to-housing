@@ -2,7 +2,7 @@
 
 **Mesh to Housing** is a framework for converting complex 3D models into sparse spatial guides that can be reconstructed inside game housing systems with strict object-count and API constraints.
 
-The core problem is independent of any particular game: given a detailed 3D model and a limited point budget, determine which points best preserve its **geometry, topology, and visually important features**.
+The core problem is independent of any particular game: given a detailed 3D model and a limited point budget, determine which points best preserve its **geometry and visually important features**.
 
 The resulting sparse representation can then be translated into different games through separate integration layers.
 
@@ -18,7 +18,7 @@ Mesh / point-cloud processing
    │
    ├── important-feature detection
    ├── manual anchor points
-   └── topology-aware analysis
+   └── geometry-aware sparsification
    │
    ▼
 Sparse N-point representation
@@ -82,9 +82,10 @@ At a fixed point budget, the representation needs to balance:
 - geometric coverage;
 - important local features;
 - manually selected anchors;
-- significant topological structure.
+- structural properties relevant to the model.
 
-For example, if a user selects important points manually or through feature detection, the remaining point budget should be sampled **with those points already taken into account**, rather than generating an independent sparse representation and adding them afterwards.
+If important points are selected manually or through feature detection, the remaining point budget should be sampled **with those points already taken into account**, rather than generating an independent sparse representation and adding them afterwards.
+
 
 ---
 
@@ -94,9 +95,7 @@ Methods will be compared at identical target point counts.
 
 ### Geometric baselines
 
-Standard geometric methods such as **uniform sampling, farthest-point sampling, and mesh simplification** will provide reference baselines.
-
-These establish how well the model can be represented using geometry alone.
+Standard methods such as **uniform sampling, farthest-point sampling, and mesh simplification** will provide reference baselines for geometry-only reduction.
 
 ### Feature-aware sampling
 
@@ -105,16 +104,17 @@ Important points can be fixed before the remaining geometry is sparsified.
 They may come from:
 
 - manual anchor selection;
-- geometric saliency;
-- CV / ML-assisted landmark or feature detection where appropriate.
+- geometric or mesh saliency;
+- CV-assisted landmark detection;
+- learned feature-selection methods where useful.
 
-The remaining points will then be selected while accounting for those existing anchors, allowing the limited point budget to be distributed more effectively over the rest of the model.
+The remaining points will then be selected while accounting for those existing anchors, allowing the available point budget to be distributed more effectively over the rest of the model.
 
-### Topology-aware sampling
+### Topology-aware analysis
 
-The project will investigate whether **Topological Data Analysis (TDA)** can improve sparse representations beyond purely geometric methods.
+For models with meaningful connected components, loops, or cavities, the project will also investigate **Topological Data Analysis (TDA)** as an additional evaluation and sampling signal.
 
-Persistent homology can be used to measure whether important connected structures, loops, or cavities are retained after reduction.
+Persistent homology can be used to test whether significant topological structures survive reduction and, where useful, whether this information can improve point selection.
 
 ---
 
@@ -122,17 +122,17 @@ Persistent homology can be used to measure whether important connected structure
 
 The core pipeline outputs a game-independent set of spatial guide points.
 
-Depending on the capabilities of a particular game, these can be represented in two main ways:
+Depending on the capabilities of a particular game, these can be represented in two main ways.
 
 ### Direct visualization
 
-Where addon APIs support custom 3D visualization, the guide can be displayed directly in the game as points or markers positioned at the generated coordinates.
+Where addon APIs support custom 3D visualization, the guide can be displayed directly in-game as points or markers positioned at the generated coordinates.
 
 ### Object-based representation
 
 Where direct visualization is not available, in-game objects can be placed at the guide coordinates to represent the sparse model.
 
-Different objects, colors, or visual markers can also be used to distinguish automatically selected points from important feature or anchor points.
+Different objects, colors, or markers may also be used to distinguish automatically selected points from important feature or anchor points.
 
 Initial target environments are:
 
@@ -149,6 +149,6 @@ Reduction methods will be compared at the same point budgets using three main cr
 
 - **Geometric fidelity** — how well the sparse representation covers the original shape;
 - **Feature preservation** — whether important automatic and manually selected features remain represented;
-- **Topology preservation** — whether significant structural properties of the original model survive reduction.
+- **Topology preservation** — where relevant, whether significant structural properties survive reduction.
 
 A small reference model set will be included for reproducible comparisons, while the pipeline will also support user-provided 3D models.
