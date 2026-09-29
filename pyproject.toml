@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mesh-to-housing"
+version = "0.1.0"
+description = "Mesh sparsification for spatial construction guides"
+requires-python = ">=3.9"
+dependencies = ["numpy>=1.24,<3", "trimesh>=4.6,<5"]
+
+[project.optional-dependencies]
+notebook = ["plotly>=5.18,<7", "nbformat>=5.9,<6", "ipykernel>=6,<7", "pycollada>=0.8,<1", "fast-simplification>=0.1.9,<0.1.13"]
+dev = ["pytest>=8,<9"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["mesh_to_housing*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

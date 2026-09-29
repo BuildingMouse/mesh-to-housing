@@ -1,2 +1,18 @@
 __pycache__/
 .DS_Store
+*.py[cod]
+*.fbx
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Local research data.
+/datasets/data/
+
+/docs/
+/tests/
+.ipynb_checkpoints/
+*.egg-info/
+build/
+dist/
