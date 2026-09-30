@@ -7,7 +7,9 @@ from typing import Callable
 import numpy as np
 import trimesh
 
-from ..geometry.mesh import prepare_mesh, unique_points
+from ..geometry.points import unique_points
+from ..meshes.loading import MeshLoader
+from ..meshes.preparation import prepare_mesh
 from ..sparsification import METHODS
 
 
@@ -22,9 +24,15 @@ class SparseResult:
 
 class MeshProcessor:
     def __init__(self, mesh: trimesh.Trimesh):
-        self.mesh = prepare_mesh(mesh)
+        self.mesh = prepare_mesh(MeshLoader.load(mesh))
 
-    def run(
+    def simplify(self, *, face_count: int) -> trimesh.Trimesh:
+        """Quadric decimation to an approximate triangle count, without anchors."""
+        from ..sparsification.simplification import simplify_mesh
+
+        return simplify_mesh(self.mesh, face_count=face_count)
+
+    def select_points(
         self,
         n_points: int,
         method: str | Callable = "random",

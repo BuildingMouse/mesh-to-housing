@@ -10,6 +10,8 @@ requires-python = ">=3.9"
 dependencies = ["numpy>=1.24,<3", "trimesh>=4.6,<5"]
 
 [project.optional-dependencies]
+formats = ["pycollada>=0.8,<1", "assimp-py>=1.1,<2"]
+blocks = ["scipy>=1.10,<2", "rtree>=1.2,<2"]
 notebook = ["plotly>=5.18,<7", "nbformat>=5.9,<6", "ipykernel>=6,<7", "pycollada>=0.8,<1", "fast-simplification>=0.1.9,<0.1.13"]
 dev = ["pytest>=8,<9"]
 
