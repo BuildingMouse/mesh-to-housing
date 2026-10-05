@@ -1,0 +1,15 @@
+## Interface: 120100, 120007, 120005
+## Title: MouseHousingTools
+## Notes: Shape previews and click-assisted housing placement.
+## Version: 0.1.0
+## SavedVariables: MouseHousingToolsDB
+
+Shapes\Layout.lua
+Housing\API.lua
+Housing\Motion.lua
+Housing\Placement.lua
+UI\Widgets.lua
+UI\Preview.lua
+UI\Calibration.lua
+UI\Window.lua
+Init.lua
