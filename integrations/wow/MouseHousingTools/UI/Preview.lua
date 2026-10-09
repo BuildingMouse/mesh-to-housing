@@ -12,6 +12,9 @@ function Preview.New(parent)
     self.caption = MHT.UI.Text(self.frame, "Block approximation - drag to turn", 12, 12, 450)
     self.sourceLabel = MHT.UI.Text(self.frame, "SOURCE / START", 0, 0, 115)
     self.sourceLabel:SetTextColor(1, 0.76, 0.3)
+    self.sourceDot = self.frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    self.sourceDot:SetText("●")
+    self.sourceDot:SetTextColor(1, 0.76, 0.3)
     self.frame:EnableMouse(true)
     self.frame:SetScript("OnMouseDown", function(_, button)
         if button == "LeftButton" then
@@ -34,21 +37,29 @@ function Preview.New(parent)
     return self
 end
 
-function Preview:SetPlan(plan)
-    self.plan = plan
+function Preview:SetPlan(plan, shape)
+    self.plan, self.shape = plan, shape
+    self.caption:SetText(shape == "stairs" and "Block approximation - drag to turn" or "Shape preview - drag to turn")
     self:Draw()
 end
 
 function Preview:Draw()
     for _, line in ipairs(self.lines) do line:Hide() end
-    if not self.plan then self.sourceLabel:Hide(); return end
+    self.sourceLabel:Hide()
+    self.sourceDot:Hide()
+    if not self.plan then return end
     local c, s = math.cos(self.yaw), math.sin(self.yaw)
     local cp, sp = math.cos(self.pitch), math.sin(self.pitch)
     local function project(p)
         return { c * p[1] - s * p[2], sp * (s * p[1] + c * p[2]) + cp * p[3] }
     end
     local boxes, low, high = {}, { math.huge, math.huge }, { -math.huge, -math.huge }
-    local all = { self.plan.source }
+    local all = {}
+    if self.shape == "stairs" then
+        all[1] = self.plan.source
+    else
+        low, high = { 0, 0 }, { 0, 0 }
+    end
     for _, item in ipairs(self.plan.items) do all[#all + 1] = item end
     for _, item in ipairs(all) do
         local box = {}
@@ -67,6 +78,7 @@ function Preview:Draw()
     end
     local index = 0
     for b, box in ipairs(boxes) do
+        local source = self.shape == "stairs" and b == 1
         for _, edge in ipairs(edges) do
             index = index + 1
             local line = self.lines[index]
@@ -75,14 +87,20 @@ function Preview:Draw()
             local x2, y2 = screen(box[edge[2]])
             line:SetStartPoint("BOTTOMLEFT", self.frame, x1, y1)
             line:SetEndPoint("BOTTOMLEFT", self.frame, x2, y2)
-            line:SetThickness(b == 1 and 2 or 1)
-            if b == 1 then line:SetColorTexture(1, 0.76, 0.3, 1)
+            line:SetThickness(source and 2 or 1)
+            if source then line:SetColorTexture(1, 0.76, 0.3, 1)
             else line:SetColorTexture(0.38, 0.72, 0.82, 0.85) end
             line:Show()
         end
     end
     local x, y = screen(project({ 0, 0, 0 }))
-    self.sourceLabel:ClearAllPoints()
-    self.sourceLabel:SetPoint("TOP", self.frame, "BOTTOMLEFT", x, y - 12)
-    self.sourceLabel:Show()
+    if self.shape == "stairs" then
+        self.sourceLabel:ClearAllPoints()
+        self.sourceLabel:SetPoint("TOP", self.frame, "BOTTOMLEFT", x, y - 12)
+        self.sourceLabel:Show()
+    else
+        self.sourceDot:ClearAllPoints()
+        self.sourceDot:SetPoint("CENTER", self.frame, "BOTTOMLEFT", x, y)
+        self.sourceDot:Show()
+    end
 end

@@ -25,6 +25,8 @@ class MeshLoader:
             return cls._load_fbx(path)
 
         if file_type not in trimesh.available_formats():
+            if file_type in {"dae", "zae"}:
+                raise ImportError("COLLADA loading requires pycollada.")
             raise ValueError(f"Unsupported mesh format: {path.suffix or '(no extension)'}")
         return trimesh.load_scene(path, file_type=file_type, process=False).to_mesh()
 
