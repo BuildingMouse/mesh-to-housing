@@ -3,19 +3,11 @@ local Motion = {}
 Motion.__index = Motion
 MHT.Motion = Motion
 
+-- Translation units/second and scale change/second.
+Motion.StandardProfile = { right = 1, forward = 1, up = 1, grow = 0.2, shrink = 0.2 }
+
 function Motion.New(api)
     return setmetatable({ api = api, active = {} }, Motion)
-end
-
-function Motion.Validate(profile)
-    for _, key in ipairs({ "right", "forward", "up", "grow", "shrink" }) do
-        local value = profile[key]
-        if type(value) ~= "number" or value ~= value or value <= 0 or value > 10000 then
-            return nil, "Set positive measured rates in Calibration first."
-        end
-    end
-    if not profile.confirmed then return nil, "Complete Calibration before starting." end
-    return true
 end
 
 function Motion:Stop()
@@ -31,6 +23,7 @@ function Motion:Begin(phases, guid, done)
 end
 
 function Motion:Place(item, profile, guid, done)
+    profile = profile or Motion.StandardProfile
     local move = {}
     for _, axis in ipairs({ { "x", "right", "Right", "Left" },
                             { "y", "forward", "Forward", "Back" },
@@ -49,12 +42,6 @@ function Motion:Place(item, profile, guid, done)
     end
     self:Begin({ { mode = "Scale", reset = true, controls = resize },
                  { mode = "Translate", controls = move } }, guid, done)
-end
-
-function Motion:Probe(control, guid, done)
-    local scale = control == "ScaleUp" or control == "ScaleDown"
-    self:Begin({ { mode = scale and "Scale" or "Translate", reset = scale,
-                   controls = { { name = control, duration = 0.5 } } } }, guid, done)
 end
 
 function Motion:Update(elapsed)
