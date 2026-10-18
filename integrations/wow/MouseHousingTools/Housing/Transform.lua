@@ -48,14 +48,32 @@ end
 
 -- Poses describe visual centers; the game moves the pivot. Precompensate so
 -- resizing and rotating after translation leave the center at the target.
-function Transform.Translation(from, target, pivot)
+function Transform.Translation(from, target, pivot, rotationPivots)
     from = from or {}
     pivot = pivot or { x = 0, y = 0, z = 0 }
     local startOffset = Transform.PivotOffset(from, pivot)
-    local endOffset = Transform.PivotOffset(target, pivot)
-    return {
-        x = (target.x or 0) - (from.x or 0) + endOffset.x - startOffset.x,
-        y = (target.y or 0) - (from.y or 0) + endOffset.y - startOffset.y,
-        z = (target.z or 0) - (from.z or 0) + endOffset.z - startOffset.z,
-    }
+    local scaled = { scale = target.scale or 1, rotation = Transform.Rotation(from) }
+    local scaledOffset = Transform.PivotOffset(scaled, pivot)
+    local shift = {}
+    for _, coordinate in ipairs({ "x", "y", "z" }) do
+        shift[coordinate] = (target[coordinate] or 0) - (from[coordinate] or 0)
+            + scaledOffset[coordinate] - startOffset[coordinate]
+    end
+    local rotation = Transform.RotationDelta(from, target)
+    local applied = { x = 0, y = 0, z = 0 }
+    -- Follow the same X/Y/Z sequence as Motion, compensating each pivot separately.
+    for _, axis in ipairs({ "x", "y", "z" }) do
+        local offset = Transform.PivotOffset(scaled, rotationPivots and rotationPivots[axis] or pivot)
+        local before = Transform.PivotOffset({ rotation = applied }, offset)
+        applied[axis] = rotation[axis]
+        local after = Transform.PivotOffset({ rotation = applied }, offset)
+        for _, coordinate in ipairs({ "x", "y", "z" }) do
+            shift[coordinate] = shift[coordinate] + after[coordinate] - before[coordinate]
+        end
+    end
+    -- Floating-point residue must not start an unwanted movement tick.
+    for coordinate, value in pairs(shift) do
+        if math.abs(value) < 1e-9 then shift[coordinate] = 0 end
+    end
+    return shift
 end

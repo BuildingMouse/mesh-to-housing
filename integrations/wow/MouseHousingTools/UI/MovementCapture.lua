@@ -73,16 +73,21 @@ function CapturePanel:Refresh()
     end
 end
 
-function CapturePanel:Start()
-    if self.blocked or self:Busy() then return end
+function CapturePanel:Start(options)
+    if self:Busy() then return end
     if not self.api:Active() or self.api:Mode() ~= Enum.HouseEditorMode.ExpertDecor then
         return nil, "Open Advanced mode first."
     end
     local selected = self.api:Selected()
     if not selected or selected.isLocked then return nil, "Select an unlocked item first." end
     local bindings, count = self.api:MovementBindings(), 0
-    for _, keys in pairs(bindings) do count = count + #keys end
-    if count == 0 then return nil, "Set your housing movement keybinds first." end
+    self.allowed = {}
+    for _, axis in ipairs(MHT.MovementCapture.Axes) do
+        local enabled = not options or not options.axes or options.axes[axis.axis]
+        self.allowed[axis.positive], self.allowed[axis.negative] = enabled, enabled
+        if enabled then count = count + #bindings[axis.positive] + #bindings[axis.negative] end
+    end
+    if count == 0 then return nil, "Set housing movement keybinds for the test axes first." end
 
     self.api:PrepareSubmode("Translate")
     for _, axis in ipairs(MHT.MovementCapture.Axes) do
@@ -90,6 +95,7 @@ function CapturePanel:Start()
     end
     self.guid = selected.decorGUID
     self.held, self.moving = {}, {}
+    self.stopReason = nil
     self.bindingsInstalled = true
     for direction, keys in pairs(bindings) do
         for _, key in ipairs(keys) do
@@ -112,6 +118,7 @@ end
 function CapturePanel:Input(direction, key, down)
     if not self:Busy() then return end
     if not self:CheckSelection() then return end
+    if not self.allowed[direction] then return end
     self.held[direction] = self.held[direction] or {}
     self.held[direction][key] = down or nil
     self.recorder:SetActive(direction, next(self.held[direction]) ~= nil)
@@ -154,6 +161,7 @@ function CapturePanel:ClearBindings()
 end
 
 function CapturePanel:Stop(message)
+    self.stopReason = message
     self.recorder:Stop()
     for direction in pairs(self.moving) do pcall(self.api.Increment, self.api, direction, false) end
     self.held, self.moving = {}, {}

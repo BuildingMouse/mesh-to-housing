@@ -11,12 +11,20 @@ ItemProfiles.ByDecorID = {
     },
 }
 
-function ItemProfiles.Pivot(decorID)
+function ItemProfiles.Pivot(decorID, axis, measurements)
     local profile = ItemProfiles.ByDecorID[decorID]
-    if not profile then return { x = 0, y = 0, z = 0 } end
-    return {
-        x = profile.pivot.x,
-        y = profile.pivot.y,
-        z = profile.pivot.z,
-    }
+    local preset = profile and profile.pivot or {}
+    local axisPreset = profile and profile.rotationPivots and profile.rotationPivots[axis] or {}
+    local item = measurements and measurements[decorID]
+    local measured = item and item.pivot and item.pivot[axis]
+    local pivot = {}
+    for _, coordinate in ipairs({ "x", "y", "z" }) do
+        local value = measured and measured.units and measured.units[coordinate]
+        if coordinate ~= axis and type(value) == "number" and value == value and math.abs(value) < math.huge then
+            pivot[coordinate] = value
+        else
+            pivot[coordinate] = axisPreset[coordinate] or preset[coordinate] or 0
+        end
+    end
+    return pivot
 end

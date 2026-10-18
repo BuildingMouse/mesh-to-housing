@@ -40,6 +40,7 @@ function Window.New(settings, uiState)
     self.objectsTab = UI.Button(frame, "3D Objects", 146, 46, 120, function() self:Mode("objects") end)
     self.testTab = UI.Button(frame, "Transform test", 274, 46, 130, function() self:Mode("test") end)
     self.captureTab = UI.Button(frame, "Movement capture", 412, 46, 145, function() self:Mode("capture") end)
+    self.calibrationTab = UI.Button(frame, "Calibrate", 565, 46, 120, function() self:Mode("calibration") end)
 
     self.objects = CreateFrame("Frame", nil, frame)
     self.objects:SetAllPoints(frame)
@@ -130,12 +131,19 @@ function Window.New(settings, uiState)
         "Use an item with all three rings. Test one nonzero angle at a time. Timing is an estimate; adjust deg / sec. First cycled axis: 1 = X, 2 = Y, 3 = Z. These rotation settings also apply to shapes.",
         18, 390, 740)
 
+    uiState.calibration = uiState.calibration or {}
+    uiState.calibration.measurements = uiState.calibration.measurements or {}
     self.placement = MHT.Placement.New(MHT.Housing, function(message, completed, total)
         self:SetStatus(message, completed, total)
         self.progress:SetText(total > 0 and string.format("%d / %d", completed, total) or "")
         self:Lock(self.placement:Busy())
-    end)
+    end, uiState.calibration.measurements)
     self.capture = MHT.CapturePanel.New(frame, MHT.Housing, function() self:StartCapture() end, function(message)
+        if not self.calibration or not self.calibration:Busy() then self:SetStatus(message) end
+        self:Lock(self.placement:Busy())
+    end)
+    self.calibration = MHT.CalibrationPanel.New(frame, MHT.Housing, self.capture, uiState.calibration,
+        function() self:StartCalibration() end, function(message)
         self:SetStatus(message)
         self:Lock(self.placement:Busy())
     end)
@@ -156,17 +164,19 @@ function Window.New(settings, uiState)
 end
 
 function Window:Busy()
-    return self.placement:Busy() or self.capture:Busy()
+    return self.placement:Busy() or self.capture:Busy() or self.calibration:Busy()
 end
 
 function Window:Update(elapsed)
     self.capture:Update(elapsed)
     self.placement:Update(elapsed)
+    self.calibration:Update(elapsed)
 end
 
 function Window:OnEvent(event, ...)
     self.capture:OnEvent(event, ...)
     self.placement:OnEvent(event, ...)
+    self.calibration:OnEvent(event, ...)
 end
 
 function Window:SavePosition()
@@ -227,6 +237,7 @@ function Window:StartPlacement()
     if self:Busy() then return end
     if self.mode == "test" then self:StartTest(); return end
     if self.mode == "capture" then self:StartCapture(); return end
+    if self.mode == "calibration" then self:StartCalibration(); return end
 
     self:Mode("shapes")
     self:Refresh()
@@ -286,6 +297,11 @@ function Window:StartCapture()
     end
 end
 
+function Window:StartCalibration()
+    if self:Busy() or not self:ValidRotationSettings() then return end
+    self.calibration:Start(self:MotionProfile())
+end
+
 function Window:ValidRotationSettings()
     local s = self.testSettings
     if type(s.rotate) ~= "number" or s.rotate ~= s.rotate or s.rotate <= 0 or s.rotate > 3600 then
@@ -300,7 +316,9 @@ function Window:ValidRotationSettings()
 end
 
 function Window:EndPlacement(message)
-    if self.capture:Busy() or self.capture.bindingsInstalled then
+    if self.calibration:Busy() then
+        self.calibration:Abort(message)
+    elseif self.capture:Busy() or self.capture.bindingsInstalled then
         self.capture:Stop(message)
     else
         self.placement:Abort(message)
@@ -314,16 +332,22 @@ function Window:Mode(mode)
     self.objects:SetShown(mode == "objects")
     self.testContent:SetShown(mode == "test")
     self.capture.frame:SetShown(mode == "capture")
+    self.calibration.frame:SetShown(mode == "calibration")
     self.shapesTab:SetEnabled(mode ~= "shapes")
     self.objectsTab:SetEnabled(mode ~= "objects")
     self.testTab:SetEnabled(mode ~= "test")
     self.captureTab:SetEnabled(mode ~= "capture")
+    self.calibrationTab:SetEnabled(mode ~= "calibration")
     if mode == "test" then self:SetStatus("Set shift and rotation, then Start and click an item in Advanced mode.") end
     if mode == "capture" then self:SetStatus("Select an item in Advanced mode, then Start to capture movement keys.") end
+    if mode == "calibration" then self:SetStatus("Choose a test and axis. Deselect the item, then Start and hover the source.") end
 end
 
 function Window:Lock(busy)
-    self.capture:SetBlocked(busy)
+    local calibrating = self.calibration and self.calibration:Busy()
+    self.capture:SetBlocked(busy or calibrating)
+    if self.calibration then self.calibration:SetBlocked(busy or (self.capture:Busy() and not calibrating)) end
+    busy = busy or calibrating
     busy = busy or self.capture:Busy()
     for _, control in ipairs(self.controls) do control:SetEnabled(not busy) end
 
@@ -338,6 +362,7 @@ function Window:Lock(busy)
     self.shapesTab:SetEnabled(not busy and self.mode ~= "shapes")
     self.testTab:SetEnabled(not busy and self.mode ~= "test")
     self.captureTab:SetEnabled(not busy and self.mode ~= "capture")
+    self.calibrationTab:SetEnabled(not busy and self.mode ~= "calibration")
     for _, control in ipairs(self.testInputs) do control:SetEnabled(not busy) end
     self.testStart:SetEnabled(not busy)
     self.testAbort:SetEnabled(busy)
