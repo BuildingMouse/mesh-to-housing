@@ -59,7 +59,7 @@ function EditorControls.New(window)
     window.onStatus = function(message, completed, total)
         self.status:SetText(message)
         self.progress:SetText(total and total > 0 and string.format("%d / %d", completed or 0, total) or "")
-        self.start:SetEnabled(not window.placement:Busy())
+        self.start:SetEnabled(not window:Busy())
     end
 
     self.bindingOwner = CreateFrame("Frame")

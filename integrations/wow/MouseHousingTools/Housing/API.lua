@@ -118,6 +118,26 @@ function API:CycleRotationAxis()
     C_HousingExpertMode.SelectNextRotationAxis()
 end
 
+function API:PrecisionSubmode()
+    return C_HousingExpertMode.GetPrecisionSubmode()
+end
+
+function API:MovementBindings()
+    local bindings = {}
+    for _, axis in ipairs(MHT.MovementCapture.Axes) do
+        for _, name in ipairs({ axis.positive, axis.negative }) do
+            local action = "HOUSING_EXPERTDECORINCREMENT_" .. name:upper()
+            local keys = { GetBindingKey(action) }
+            if #keys == 0 and C_KeyBindings then
+                local key = C_KeyBindings.GetBindingByKey(action, Enum.BindingContext.HousingEditorExpertDecorMode)
+                if key and key ~= "" then keys[1] = key end
+            end
+            bindings[name] = keys
+        end
+    end
+    return bindings
+end
+
 function API:SaveSettings()
     return {
         free = C_HousingBasicMode.IsFreePlaceEnabled(),

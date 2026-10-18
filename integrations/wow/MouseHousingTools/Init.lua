@@ -5,7 +5,7 @@ events:RegisterEvent("ADDON_LOADED")
 local function stopOnError(action, ...)
     local ok, reason = pcall(action, ...)
     if not ok and MHT.window then
-        MHT.window.placement:Abort(tostring(reason))
+        MHT.window:EndPlacement(tostring(reason))
     end
 end
 
@@ -61,12 +61,15 @@ local function initialize()
         "HOUSE_EDITOR_MODE_CHANGED",
         "PLAYER_ENTERING_WORLD",
         "PLAYER_REGEN_ENABLED",
+        "UPDATE_BINDINGS",
+        "HOUSING_DECOR_PRECISION_SUBMODE_CHANGED",
+        "HOUSING_EXPERT_MODE_SELECTED_TARGET_CHANGED",
     }) do
         events:RegisterEvent(event)
     end
 
     events:SetScript("OnUpdate", function(_, elapsed)
-        stopOnError(MHT.window.placement.Update, MHT.window.placement, elapsed)
+        stopOnError(MHT.window.Update, MHT.window, elapsed)
     end)
 
     MHT.editorControls:Sync()
@@ -83,7 +86,7 @@ events:SetScript("OnEvent", function(_, event, ...)
 
     if not MHT.window then return end
 
-    stopOnError(MHT.window.placement.OnEvent, MHT.window.placement, event, ...)
+    stopOnError(MHT.window.OnEvent, MHT.window, event, ...)
 
     if event == "HOUSE_EDITOR_MODE_CHANGED"
         or event == "PLAYER_ENTERING_WORLD"

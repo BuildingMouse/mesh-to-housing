@@ -26,7 +26,7 @@ function Window.New(settings, uiState)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
 
-    frame:SetScript("OnDragStart", function() if not self.placement:Busy() then frame:StartMoving() end end)
+    frame:SetScript("OnDragStart", function() if not self:Busy() then frame:StartMoving() end end)
 
     frame:SetScript("OnDragStop", function()
         frame:StopMovingOrSizing()
@@ -39,6 +39,7 @@ function Window.New(settings, uiState)
     self.shapesTab = UI.Button(frame, "Shapes", 18, 46, 120, function() self:Mode("shapes") end)
     self.objectsTab = UI.Button(frame, "3D Objects", 146, 46, 120, function() self:Mode("objects") end)
     self.testTab = UI.Button(frame, "Transform test", 274, 46, 130, function() self:Mode("test") end)
+    self.captureTab = UI.Button(frame, "Movement capture", 412, 46, 145, function() self:Mode("capture") end)
 
     self.objects = CreateFrame("Frame", nil, frame)
     self.objects:SetAllPoints(frame)
@@ -134,6 +135,10 @@ function Window.New(settings, uiState)
         self.progress:SetText(total > 0 and string.format("%d / %d", completed, total) or "")
         self:Lock(self.placement:Busy())
     end)
+    self.capture = MHT.CapturePanel.New(frame, MHT.Housing, function() self:StartCapture() end, function(message)
+        self:SetStatus(message)
+        self:Lock(self.placement:Busy())
+    end)
 
     self.start = UI.Button(self.content, "Start", 18, 525, 95, function() self:StartPlacement() end)
     self.abort = UI.Button(self.content, "Abort", 121, 525, 95, function() self:EndPlacement() end)
@@ -148,6 +153,20 @@ function Window.New(settings, uiState)
     self:Mode("shapes")
     frame:Hide()
     return self
+end
+
+function Window:Busy()
+    return self.placement:Busy() or self.capture:Busy()
+end
+
+function Window:Update(elapsed)
+    self.capture:Update(elapsed)
+    self.placement:Update(elapsed)
+end
+
+function Window:OnEvent(event, ...)
+    self.capture:OnEvent(event, ...)
+    self.placement:OnEvent(event, ...)
 end
 
 function Window:SavePosition()
@@ -184,6 +203,7 @@ function Window:SetHousingParent(parent)
     self:ApplySavedPosition(parent)
     self.frame:SetFrameStrata("FULLSCREEN_DIALOG")
     self.frame:SetFrameLevel((parent.GetFrameLevel and parent:GetFrameLevel() or 0) + 90)
+    self.capture:SetHousingParent(parent)
 
     self.frame:SetShown(wasShown)
 end
@@ -204,8 +224,9 @@ function Window:Toggle()
 end
 
 function Window:StartPlacement()
-    if self.placement:Busy() then return end
+    if self:Busy() then return end
     if self.mode == "test" then self:StartTest(); return end
+    if self.mode == "capture" then self:StartCapture(); return end
 
     self:Mode("shapes")
     self:Refresh()
@@ -236,7 +257,7 @@ function Window:MotionProfile()
 end
 
 function Window:StartTest()
-    if self.placement:Busy() then return end
+    if self:Busy() then return end
     local s = self.testSettings
     for _, key in ipairs({ "x", "y", "z", "rx", "ry", "rz" }) do
         if type(s[key]) ~= "number" or s[key] ~= s[key] or math.abs(s[key]) > 360 then
@@ -255,6 +276,16 @@ function Window:StartTest()
     end
 end
 
+function Window:StartCapture()
+    if self:Busy() then return end
+    local ok, started, reason = pcall(self.capture.Start, self.capture)
+    if not ok then
+        self.capture:Stop(tostring(started))
+    elseif not started then
+        self:SetStatus(reason)
+    end
+end
+
 function Window:ValidRotationSettings()
     local s = self.testSettings
     if type(s.rotate) ~= "number" or s.rotate ~= s.rotate or s.rotate <= 0 or s.rotate > 3600 then
@@ -268,23 +299,32 @@ function Window:ValidRotationSettings()
     return true
 end
 
-function Window:EndPlacement()
-    self.placement:Abort()
+function Window:EndPlacement(message)
+    if self.capture:Busy() or self.capture.bindingsInstalled then
+        self.capture:Stop(message)
+    else
+        self.placement:Abort(message)
+    end
 end
 
 function Window:Mode(mode)
-    if self.placement:Busy() then return end
+    if self:Busy() then return end
     self.mode = mode
     self.content:SetShown(mode == "shapes")
     self.objects:SetShown(mode == "objects")
     self.testContent:SetShown(mode == "test")
+    self.capture.frame:SetShown(mode == "capture")
     self.shapesTab:SetEnabled(mode ~= "shapes")
     self.objectsTab:SetEnabled(mode ~= "objects")
     self.testTab:SetEnabled(mode ~= "test")
+    self.captureTab:SetEnabled(mode ~= "capture")
     if mode == "test" then self:SetStatus("Set shift and rotation, then Start and click an item in Advanced mode.") end
+    if mode == "capture" then self:SetStatus("Select an item in Advanced mode, then Start to capture movement keys.") end
 end
 
 function Window:Lock(busy)
+    self.capture:SetBlocked(busy)
+    busy = busy or self.capture:Busy()
     for _, control in ipairs(self.controls) do control:SetEnabled(not busy) end
 
     local stairs = self.settings.shape == "stairs"
@@ -297,6 +337,7 @@ function Window:Lock(busy)
     self.objectsTab:SetEnabled(not busy)
     self.shapesTab:SetEnabled(not busy and self.mode ~= "shapes")
     self.testTab:SetEnabled(not busy and self.mode ~= "test")
+    self.captureTab:SetEnabled(not busy and self.mode ~= "capture")
     for _, control in ipairs(self.testInputs) do control:SetEnabled(not busy) end
     self.testStart:SetEnabled(not busy)
     self.testAbort:SetEnabled(busy)

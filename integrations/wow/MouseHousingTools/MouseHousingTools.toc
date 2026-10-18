@@ -9,9 +9,11 @@ Housing\API.lua
 Housing\ItemProfiles.lua
 Housing\Transform.lua
 Housing\Motion.lua
+Housing\MovementCapture.lua
 Housing\Placement.lua
 UI\Widgets.lua
 UI\Preview.lua
+UI\MovementCapture.lua
 UI\Window.lua
 UI\EditorControls.lua
 Init.lua
