@@ -38,6 +38,7 @@ function Window.New(settings, uiState)
 
     self.shapesTab = UI.Button(frame, "Shapes", 18, 46, 120, function() self:Mode("shapes") end)
     self.objectsTab = UI.Button(frame, "3D Objects", 146, 46, 120, function() self:Mode("objects") end)
+    self.testTab = UI.Button(frame, "Transform test", 274, 46, 130, function() self:Mode("test") end)
 
     self.objects = CreateFrame("Frame", nil, frame)
     self.objects:SetAllPoints(frame)
@@ -55,8 +56,8 @@ function Window.New(settings, uiState)
         { "count", "Items" }, { "rotation", "Item rotation (deg)" },
         { "slope", "Stair slope (deg)" }, { "spacing", "Straight step spacing" },
         { "turns", "Stair turns (0 = straight)" }, { "radius", "Curve / circle radius" },
-        { "width", "Preview width" }, { "depth", "Preview depth" },
-        { "thickness", "Preview thickness" }, { "clearance", "Source clearance" },
+        { "width", "Item width" }, { "depth", "Item depth" },
+        { "thickness", "Item thickness" }, { "clearance", "Source clearance" },
     }
 
     for i, field in ipairs(fields) do
@@ -95,7 +96,38 @@ function Window.New(settings, uiState)
 
     self.preview = MHT.Preview.New(self.content)
     self.summary = UI.Text(self.content, "", 302, 510, 490)
-    self.status = UI.Text(self.content, "", 18, 563, 774)
+    self.status = UI.Text(frame, "", 18, 563, 774)
+
+    self.testContent = CreateFrame("Frame", nil, frame)
+    self.testContent:SetAllPoints(frame)
+    uiState.transformTest = uiState.transformTest or {}
+    self.testSettings = uiState.transformTest
+    -- Replace the old unmeasured 90 deg/sec default once; retain custom speeds.
+    if not uiState.rotationSpeedVersion then
+        if self.testSettings.rotate == 90 then self.testSettings.rotate = MHT.Motion.StandardProfile.rotate end
+        uiState.rotationSpeedVersion = 1
+    end
+    local testFields = {
+        { "x", "Shift X", 0 }, { "y", "Shift Y", 0 }, { "z", "Shift Z", 0 },
+        { "rx", "Rotate X (deg)", 0 }, { "ry", "Rotate Y (deg)", 0 }, { "rz", "Rotate Z (deg)", 45 },
+        { "rotate", "Rotation deg / sec", MHT.Motion.StandardProfile.rotate },
+        { "firstRotationAxis", "First cycled axis (1-3)", 1 },
+    }
+    self.testInputs = {}
+    for i, field in ipairs(testFields) do
+        if self.testSettings[field[1]] == nil then self.testSettings[field[1]] = field[3] end
+        local control = UI.Number(self.testContent, field[2], 18 + ((i - 1) % 3) * 260,
+            120 + math.floor((i - 1) / 3) * 60, self.testSettings[field[1]], function(value)
+                self.testSettings[field[1]] = value
+            end)
+        self.testInputs[#self.testInputs + 1] = control
+    end
+    UI.Text(self.testContent,
+        "Deselect the item, press Start, then click it in Advanced mode. This raw API test shifts the pivot and adds rotation on X, Y, Z one at a time. No pivot compensation; size stays unchanged. End cancels the test.",
+        18, 330, 740)
+    UI.Text(self.testContent,
+        "Use an item with all three rings. Test one nonzero angle at a time. Timing is an estimate; adjust deg / sec. First cycled axis: 1 = X, 2 = Y, 3 = Z. These rotation settings also apply to shapes.",
+        18, 390, 740)
 
     self.placement = MHT.Placement.New(MHT.Housing, function(message, completed, total)
         self:SetStatus(message, completed, total)
@@ -106,6 +138,8 @@ function Window.New(settings, uiState)
     self.start = UI.Button(self.content, "Start", 18, 525, 95, function() self:StartPlacement() end)
     self.abort = UI.Button(self.content, "Abort", 121, 525, 95, function() self:EndPlacement() end)
     self.progress = UI.Text(self.content, "", 227, 532, 70)
+    self.testStart = UI.Button(self.testContent, "Start", 18, 490, 95, function() self:StartTest() end)
+    self.testAbort = UI.Button(self.testContent, "End", 121, 490, 95, function() self:EndPlacement() end)
 
     frame:SetScript("OnHide", function() self:SavePosition() end)
 
@@ -171,16 +205,18 @@ end
 
 function Window:StartPlacement()
     if self.placement:Busy() then return end
+    if self.mode == "test" then self:StartTest(); return end
 
     self:Mode("shapes")
     self:Refresh()
     if not self.plan then return end
+    if not self:ValidRotationSettings() then return end
 
     local ok, started, reason = pcall(
         self.placement.Start,
         self.placement,
         self.plan,
-        MHT.Motion.StandardProfile,
+        self:MotionProfile(),
         self.settings.placementWorkflow
     )
 
@@ -191,16 +227,61 @@ function Window:StartPlacement()
     end
 end
 
+function Window:MotionProfile()
+    local profile = {}
+    for key, value in pairs(MHT.Motion.StandardProfile) do profile[key] = value end
+    profile.rotate = self.testSettings.rotate
+    profile.firstRotationAxis = self.testSettings.firstRotationAxis
+    return profile
+end
+
+function Window:StartTest()
+    if self.placement:Busy() then return end
+    local s = self.testSettings
+    for _, key in ipairs({ "x", "y", "z", "rx", "ry", "rz" }) do
+        if type(s[key]) ~= "number" or s[key] ~= s[key] or math.abs(s[key]) > 360 then
+            self:SetStatus("Test offsets and angles must be between -360 and 360.")
+            return
+        end
+    end
+    if not self:ValidRotationSettings() then return end
+    local ok, started, reason = pcall(self.placement.StartTest, self.placement,
+        { x = s.x, y = s.y, z = s.z, rotation = { x = s.rx, y = s.ry, z = s.rz } },
+        self:MotionProfile())
+    if not ok then
+        self.placement:Abort(tostring(started))
+    elseif not started then
+        self:SetStatus(reason)
+    end
+end
+
+function Window:ValidRotationSettings()
+    local s = self.testSettings
+    if type(s.rotate) ~= "number" or s.rotate ~= s.rotate or s.rotate <= 0 or s.rotate > 3600 then
+        self:SetStatus("Rotation speed must be greater than 0 and at most 3600 degrees / second.")
+        return false
+    end
+    if s.firstRotationAxis ~= 1 and s.firstRotationAxis ~= 2 and s.firstRotationAxis ~= 3 then
+        self:SetStatus("First cycled axis must be 1 (X), 2 (Y), or 3 (Z).")
+        return false
+    end
+    return true
+end
+
 function Window:EndPlacement()
     self.placement:Abort()
 end
 
 function Window:Mode(mode)
     if self.placement:Busy() then return end
+    self.mode = mode
     self.content:SetShown(mode == "shapes")
     self.objects:SetShown(mode == "objects")
+    self.testContent:SetShown(mode == "test")
     self.shapesTab:SetEnabled(mode ~= "shapes")
     self.objectsTab:SetEnabled(mode ~= "objects")
+    self.testTab:SetEnabled(mode ~= "test")
+    if mode == "test" then self:SetStatus("Set shift and rotation, then Start and click an item in Advanced mode.") end
 end
 
 function Window:Lock(busy)
@@ -214,6 +295,11 @@ function Window:Lock(busy)
     self.stairs:SetEnabled(not busy and self.settings.shape ~= "stairs")
     self.circle:SetEnabled(not busy and self.settings.shape ~= "circle")
     self.objectsTab:SetEnabled(not busy)
+    self.shapesTab:SetEnabled(not busy and self.mode ~= "shapes")
+    self.testTab:SetEnabled(not busy and self.mode ~= "test")
+    for _, control in ipairs(self.testInputs) do control:SetEnabled(not busy) end
+    self.testStart:SetEnabled(not busy)
+    self.testAbort:SetEnabled(busy)
     self.start:SetEnabled(not busy and self.plan ~= nil)
     self.abort:SetEnabled(busy)
 end

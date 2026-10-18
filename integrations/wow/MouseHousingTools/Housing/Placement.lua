@@ -50,6 +50,7 @@ function Placement:Start(plan, profile, workflow)
     self.plan = plan
     self.profile = profile
     self.workflow = workflow
+    self.isTest = false
 
     self.copiesCreated = 0
 
@@ -76,6 +77,26 @@ function Placement:Start(plan, profile, workflow)
             and "Hover over the source and keep the mouse still. All copies will be created first."
             or "Hover over the source and keep the mouse still. Each copy will be placed, then moved."
     )
+    return true
+end
+
+function Placement:StartTest(item, profile)
+    if self:Busy() then return end
+    if not self.api:Active() or self.api:Mode() ~= Enum.HouseEditorMode.ExpertDecor then
+        return nil, "Open Advanced mode first."
+    end
+    if self.api:IsSelected() then
+        return nil, "Deselect the item, press Start, then click it to test."
+    end
+    self.plan = { items = { item } }
+    self.profile = profile
+    self.isTest = true
+    self.completed = 0
+    self.finished = {}
+    self.saved, self.source, self.cursor = nil, nil, nil
+    self.activeGUID, self.activeIndex = nil, nil
+    self.lastRejectedGUID = nil
+    self:SetState("testselect", "Test armed. Click one item in Advanced mode.")
     return true
 end
 
@@ -176,13 +197,15 @@ function Placement:HandleSelectedCopy(selected)
     if not guid then return end
 
     local reason
-    if guid == self.source.decorGUID then
+    if self.isTest and selected.isLocked then
+        reason = "That item is locked. Click an unlocked item."
+    elseif not self.isTest and guid == self.source.decorGUID then
         reason = "That is the source. Click a copy instead."
-    elseif selected.decorID and selected.decorID ~= self.source.decorID then
+    elseif not self.isTest and selected.decorID and selected.decorID ~= self.source.decorID then
         reason = "That is a different decor item. Click a copy."
     elseif self.finished[guid] then
         reason = "That copy is finished. Click another copy."
-    elseif self.workflow == "repeat" and self.createdGUID and guid ~= self.createdGUID then
+    elseif not self.isTest and self.workflow == "repeat" and self.createdGUID and guid ~= self.createdGUID then
         reason = "Click the copy just created for this target."
     end
     if reason then
@@ -207,10 +230,23 @@ function Placement:HandleSelectedCopy(selected)
         )
     )
 
-    self.motion:Place(self.plan.items[self.activeIndex], self.profile, guid, function()
+    local function done()
         self:SetState("committing", "Saving the selected copy...")
         self.api:Commit()
-    end)
+    end
+    local function onPhase(label)
+        self:SetState("moving", label .. (self.isTest and " (test)..." or " selected copy..."))
+    end
+    local target = self.plan.items[self.activeIndex]
+    if self.isTest then
+        self.motion:Apply(target, self.profile, guid, done, true, onPhase)
+    else
+        self.motion:MoveIntoPlace(target, {
+            from = self.plan.source,
+            pivot = MHT.ItemProfiles.Pivot(self.source.decorID),
+            motionProfile = self.profile,
+        }, guid, done, onPhase)
+    end
 end
 
 function Placement:Update(elapsed)
@@ -283,17 +319,8 @@ function Placement:Update(elapsed)
             local pending = self.api:PendingInfo()
 
             if pending and (not pending.decorID or pending.decorID == self.source.decorID) then
-                local copyIndex = self.copiesCreated + 1
-                self:SetState(
-                    "placing",
-                    string.format(
-                        "Placing copy %d / %d at the start point...",
-                        copyIndex,
-                        #self.plan.items
-                    )
-                )
-
-                self.api:PlaceCopy(self.plan.items[copyIndex].yaw)
+                self:SetState("placing", "Placing a copy at the start point...")
+                self.api:PlaceCopy()
             end
         end
 
@@ -307,7 +334,7 @@ function Placement:Update(elapsed)
             )
         end
 
-    elseif self.state == "select" then
+    elseif self.state == "select" or self.state == "testselect" then
         if self.api:Mode() ~= Enum.HouseEditorMode.ExpertDecor then
             self:Abort("Editor mode changed; placement stopped.")
             return
@@ -327,7 +354,7 @@ function Placement:Update(elapsed)
         self.motion:Update(elapsed)
     end
 
-    if self.state ~= "select" and self.state ~= "source" and self.state ~= "moving" and self.age > 10 then
+    if self.state ~= "select" and self.state ~= "testselect" and self.state ~= "source" and self.state ~= "moving" and self.age > 10 then
         self:Abort("The game did not confirm the last action. Placement stopped.")
     end
 end
@@ -383,7 +410,8 @@ function Placement:OnEvent(event, ...)
 
         if self.completed == #self.plan.items then
             self:Abort(
-                "Done. All " .. self.completed .. " copies were moved; source item kept."
+                self.isTest and "Test finished. Movement and rotation saved."
+                    or "Done. All " .. self.completed .. " copies were moved and rotated; source item kept."
             )
         elseif self.workflow == "repeat" then
             self:ReturnToSource()

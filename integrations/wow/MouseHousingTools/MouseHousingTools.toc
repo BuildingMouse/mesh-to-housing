@@ -6,6 +6,8 @@
 
 Shapes\Layout.lua
 Housing\API.lua
+Housing\ItemProfiles.lua
+Housing\Transform.lua
 Housing\Motion.lua
 Housing\Placement.lua
 UI\Widgets.lua
