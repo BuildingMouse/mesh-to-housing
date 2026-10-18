@@ -7,8 +7,8 @@ MHT.Motion = Motion
 Motion.StandardProfile = { right = 1, forward = 1, up = 1, grow = 0.2, shrink = 0.2,
                            rotate = 45, firstRotationAxis = 1 }
 
-function Motion.New(api)
-    return setmetatable({ api = api, active = {} }, Motion)
+function Motion.New(api, measurements)
+    return setmetatable({ api = api, measurements = measurements, active = {} }, Motion)
 end
 
 function Motion:Stop()
@@ -24,10 +24,18 @@ function Motion:Begin(phases, guid, done, onPhase)
     self.onPhase = onPhase
 end
 
--- options: known starting pose, unscaled local pivot, and API movement speeds.
+-- options: known starting pose, decor ID or explicit pivots, and API movement speeds.
 function Motion:MoveIntoPlace(target, options, guid, done, onPhase)
     options = options or {}
-    local item = MHT.Transform.Translation(options.from, target, options.pivot)
+    local pivot, rotationPivots = options.pivot, options.rotationPivots
+    if options.decorID then
+        pivot = MHT.ItemProfiles.Pivot(options.decorID)
+        rotationPivots = {}
+        for _, axis in ipairs({ "x", "y", "z" }) do
+            rotationPivots[axis] = MHT.ItemProfiles.Pivot(options.decorID, axis, self.measurements)
+        end
+    end
+    local item = MHT.Transform.Translation(options.from, target, pivot, rotationPivots)
     item.scale = target.scale or 1
     item.rotation = MHT.Transform.RotationDelta(options.from or {}, target)
     self:Apply(item, options.motionProfile, guid, done, false, onPhase)

@@ -50,26 +50,28 @@ local function dyeKey(slots)
 end
 API.DyeKey = dyeKey
 
-function API:Stock(source)
+function API:Stock(source, anyColor)
     local entryID = { entryType = Enum.HousingCatalogEntryType.Decor, recordID = source.decorID }
     local entry = C_HousingCatalog.GetCatalogEntryInfo(entryID)
     if not entry then return nil, "Item information is not ready. Try again." end
     local signature = dyeKey(source.dyeSlots)
-    local stock = { count = 0, variants = {}, name = entry.name, cost = entry.placementCost }
+    local stock = { count = 0, variants = {}, storedVariants = {}, name = entry.name, cost = entry.placementCost }
     for _, variant in ipairs(C_HousingCatalog.GetAllVariantInfosForEntry(entryID)) do
-        if dyeKey(variant.dyeSlots) == signature and variant.numStored > 0 then
+        if variant.numStored > 0 and (anyColor or dyeKey(variant.dyeSlots) == signature) then
             stock.count = stock.count + variant.numStored
             stock.variants[#stock.variants + 1] = variant.entryVariantID
+            stock.storedVariants[#stock.storedVariants + 1] = variant
         end
     end
     return stock
 end
 
-function API:CheckStock(source, count)
-    local stock, reason = self:Stock(source)
+function API:CheckStock(source, count, anyColor)
+    local stock, reason = self:Stock(source, anyColor)
     if not stock then return nil, reason end
     if stock.count < count then
-        return nil, string.format("%d matching copies in storage; %d needed. Source item is kept.", stock.count, count)
+        return nil, string.format("%d %scopies in storage; %d needed. Source item is kept.",
+            stock.count, anyColor and "" or "matching ", count)
     end
     local maximum = C_HousingDecor.GetMaxPlacementBudget()
     local spent = C_HousingDecor.GetSpentPlacementBudget()
@@ -79,10 +81,33 @@ function API:CheckStock(source, count)
     return stock
 end
 
-function API:BeginCopy(source, remaining)
-    local stock, reason = self:CheckStock(source, remaining)
+function API:CalibrationCopies(source)
+    local stock, reason = self:CheckStock(source, 2, true)
+    if not stock then return nil, reason end
+    local first, second = stock.storedVariants[1]
+    local signature = dyeKey(source.dyeSlots)
+    for _, variant in ipairs(stock.storedVariants) do
+        if dyeKey(variant.dyeSlots) == signature then first = variant; break end
+    end
+    for _, variant in ipairs(stock.storedVariants) do
+        if dyeKey(variant.dyeSlots) ~= dyeKey(first.dyeSlots) then second = variant; break end
+    end
+    if not second then
+        for _, variant in ipairs(stock.storedVariants) do
+            if variant ~= first or variant.numStored > 1 then second = variant; break end
+        end
+    end
+    return { first.entryVariantID, second.entryVariantID }
+end
+
+function API:BeginCopy(source, remaining, variantID)
+    local stock, reason = self:CheckStock(source, remaining, variantID ~= nil)
     if not stock then error(reason) end
-    C_HousingBasicMode.StartPlacingNewDecor(stock.variants[1])
+    if variantID then
+        local variant = C_HousingCatalog.GetCatalogEntryVariantInfo(variantID)
+        if not variant or variant.numStored < 1 then error("The chosen calibration color is no longer in storage.") end
+    end
+    C_HousingBasicMode.StartPlacingNewDecor(variantID or stock.variants[1])
 end
 
 function API:HasPendingCopy()

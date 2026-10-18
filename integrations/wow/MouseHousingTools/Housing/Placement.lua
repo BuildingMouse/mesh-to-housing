@@ -8,10 +8,10 @@ local BATCH_COPY_DELAY = 0.2
 
 Placement.DEFAULT_WORKFLOW = "batch"
 
-function Placement.New(api, notify)
+function Placement.New(api, notify, measurements)
     return setmetatable({
         api = api,
-        motion = MHT.Motion.New(api),
+        motion = MHT.Motion.New(api, measurements),
         notify = notify,
         state = "idle",
         completed = 0,
@@ -243,7 +243,7 @@ function Placement:HandleSelectedCopy(selected)
     else
         self.motion:MoveIntoPlace(target, {
             from = self.plan.source,
-            pivot = MHT.ItemProfiles.Pivot(self.source.decorID),
+            decorID = self.source.decorID,
             motionProfile = self.profile,
         }, guid, done, onPhase)
     end
