@@ -3,8 +3,9 @@ local Motion = {}
 Motion.__index = Motion
 MHT.Motion = Motion
 
--- Translation units/second and scale change/second.
-Motion.StandardProfile = { right = 1, forward = 1, up = 1, grow = 0.2, shrink = 0.2 }
+-- Initial speed from the tile test; the first cycled axis still needs calibration.
+Motion.StandardProfile = { right = 1, forward = 1, up = 1, grow = 0.2, shrink = 0.2,
+                           rotate = 45, firstRotationAxis = 1 }
 
 function Motion.New(api)
     return setmetatable({ api = api, active = {} }, Motion)
@@ -17,12 +18,23 @@ function Motion:Stop()
     self.active, self.queue, self.phase = {}, nil, nil
 end
 
-function Motion:Begin(phases, guid, done)
+function Motion:Begin(phases, guid, done, onPhase)
     self:Stop()
     self.queue, self.guid, self.done = phases, guid, done
+    self.onPhase = onPhase
 end
 
-function Motion:Place(item, profile, guid, done)
+-- options: known starting pose, unscaled local pivot, and API movement speeds.
+function Motion:MoveIntoPlace(target, options, guid, done, onPhase)
+    options = options or {}
+    local item = MHT.Transform.Translation(options.from, target, options.pivot)
+    item.scale = target.scale or 1
+    item.rotation = MHT.Transform.RotationDelta(options.from or {}, target)
+    self:Apply(item, options.motionProfile, guid, done, false, onPhase)
+end
+
+-- Raw increments for the diagnostic test; no starting pose is available from the API.
+function Motion:Apply(item, profile, guid, done, relative, onPhase)
     profile = profile or Motion.StandardProfile
     local move = {}
     for _, axis in ipairs({ { "x", "right", "Right", "Left" },
@@ -35,13 +47,36 @@ function Motion:Place(item, profile, guid, done)
         end
     end
     local resize = {}
-    if item.scale ~= 1 then
+    if item.scale and item.scale ~= 1 then
         local growing = item.scale > 1
         resize[1] = { name = growing and "ScaleUp" or "ScaleDown",
                       duration = math.abs(item.scale - 1) / profile[growing and "grow" or "shrink"] }
     end
-    self:Begin({ { mode = "Scale", reset = true, controls = resize },
-                 { mode = "Translate", controls = move } }, guid, done)
+    local phases = { { mode = "Translate", label = "Moving", controls = move } }
+    if item.scale then
+        phases[#phases + 1] = { mode = "Scale", label = "Resizing", reset = not relative, controls = resize }
+    end
+    local rotation = item.rotation or { x = 0, y = 0, z = (math.deg(item.yaw or 0) + 180) % 360 - 180 }
+    if (rotation.x or 0) ~= 0 or (rotation.y or 0) ~= 0 or (rotation.z or 0) ~= 0 then
+        phases[#phases + 1] = { mode = "Rotate", label = "Preparing rotation", controls = {} }
+        local first = profile.firstRotationAxis or 1
+        local previous
+        for i, axis in ipairs({ "x", "y", "z" }) do
+            local angle = rotation[axis] or 0
+            if angle ~= 0 then
+                phases[#phases + 1] = {
+                    label = "Rotating " .. axis:upper(),
+                    cycles = previous and (i - previous) % 3 or (i - first) % 3 + 1,
+                    controls = {
+                        { name = angle > 0 and "RotateRight" or "RotateLeft",
+                          duration = math.abs(angle) / profile.rotate },
+                    },
+                }
+                previous = i
+            end
+        end
+    end
+    self:Begin(phases, guid, done, onPhase)
 end
 
 function Motion:Update(elapsed)
@@ -57,7 +92,9 @@ function Motion:Update(elapsed)
             done()
             return
         end
-        self.api:PrepareSubmode(self.phase.mode, self.phase.reset)
+        if self.phase.mode then self.api:PrepareSubmode(self.phase.mode, self.phase.reset) end
+        for _ = 1, self.phase.cycles or 0 do self.api:CycleRotationAxis() end
+        if self.onPhase then self.onPhase(self.phase.label) end
         self.phase.wait = 0.08
         return
     end

@@ -89,9 +89,7 @@ function API:HasPendingCopy()
     return C_HousingBasicMode.IsPlacingNewDecor()
 end
 
-function API:PlaceCopy(yaw)
-    -- Basic mode accepts a yaw angle directly; advanced movement is timed.
-    C_HousingBasicMode.RotateDecor(math.deg(yaw) % 360)
+function API:PlaceCopy()
     C_HousingBasicMode.FinishPlacingNewDecor()
 end
 
@@ -114,6 +112,10 @@ end
 
 function API:Increment(name, active)
     C_HousingExpertMode.SetPrecisionIncrementingActive(Enum.HousingIncrementType[name], active)
+end
+
+function API:CycleRotationAxis()
+    C_HousingExpertMode.SelectNextRotationAxis()
 end
 
 function API:SaveSettings()
