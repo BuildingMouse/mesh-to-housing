@@ -11,6 +11,10 @@ ItemProfiles.ByDecorID = {
     },
 }
 
+local function finite(value)
+    return type(value) == "number" and value == value and math.abs(value) < math.huge
+end
+
 function ItemProfiles.Pivot(decorID, axis, measurements)
     local profile = ItemProfiles.ByDecorID[decorID]
     local preset = profile and profile.pivot or {}
@@ -20,7 +24,7 @@ function ItemProfiles.Pivot(decorID, axis, measurements)
     local pivot = {}
     for _, coordinate in ipairs({ "x", "y", "z" }) do
         local value = measured and measured.units and measured.units[coordinate]
-        if coordinate ~= axis and type(value) == "number" and value == value and math.abs(value) < math.huge then
+        if finite(value) then
             pivot[coordinate] = value
         else
             pivot[coordinate] = axisPreset[coordinate] or preset[coordinate] or 0
