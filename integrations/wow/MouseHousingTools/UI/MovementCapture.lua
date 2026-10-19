@@ -4,8 +4,9 @@ CapturePanel.__index = CapturePanel
 MHT.CapturePanel = CapturePanel
 
 function CapturePanel.New(parent, api, start, notify)
+    local clock = GetTimePreciseSec or GetTime
     local self = setmetatable({
-        api = api, notify = notify, recorder = MHT.MovementCapture.New(),
+        api = api, notify = notify, recorder = MHT.MovementCapture.New(clock),
         buttons = {}, held = {}, moving = {}, values = {}, keyLabels = {},
     }, CapturePanel)
     local UI = MHT.UI
@@ -73,7 +74,7 @@ function CapturePanel:Refresh()
     end
 end
 
-function CapturePanel:Start(options)
+function CapturePanel:Start(coordinate)
     if self:Busy() then return end
     if not self.api:Active() or self.api:Mode() ~= Enum.HouseEditorMode.ExpertDecor then
         return nil, "Open Advanced mode first."
@@ -83,11 +84,11 @@ function CapturePanel:Start(options)
     local bindings, count = self.api:MovementBindings(), 0
     self.allowed = {}
     for _, axis in ipairs(MHT.MovementCapture.Axes) do
-        local enabled = not options or not options.axes or options.axes[axis.axis]
+        local enabled = not coordinate or coordinate == axis.axis
         self.allowed[axis.positive], self.allowed[axis.negative] = enabled, enabled
         if enabled then count = count + #bindings[axis.positive] + #bindings[axis.negative] end
     end
-    if count == 0 then return nil, "Set housing movement keybinds for the test axes first." end
+    if count == 0 then return nil, "Set housing movement keybinds for the measured axes first." end
 
     self.api:PrepareSubmode("Translate")
     for _, axis in ipairs(MHT.MovementCapture.Axes) do
@@ -121,14 +122,31 @@ function CapturePanel:Input(direction, key, down)
     if not self.allowed[direction] then return end
     self.held[direction] = self.held[direction] or {}
     self.held[direction][key] = down or nil
-    self.recorder:SetActive(direction, next(self.held[direction]) ~= nil)
+    self:SyncInputs()
+end
+
+function CapturePanel:SyncInputs()
+    local desired = {}
     for _, axis in ipairs(MHT.MovementCapture.Axes) do
         for _, pair in ipairs({ { axis.positive, axis.negative }, { axis.negative, axis.positive } }) do
-            local active = self.recorder.active[pair[1]] and not self.recorder.active[pair[2]] or false
-            if active ~= (self.moving[pair[1]] or false) then
-                self.api:Increment(pair[1], active)
-                self.moving[pair[1]] = active or nil
-            end
+            local active = self.held[pair[1]] and next(self.held[pair[1]]) ~= nil
+                and not (self.held[pair[2]] and next(self.held[pair[2]]) ~= nil) or false
+            desired[pair[1]] = active
+        end
+    end
+    -- Release the previous direction before starting its opposite.
+    for direction in pairs(self.moving) do
+        if not desired[direction] then
+            self.recorder:SetActive(direction, false)
+            self.api:Increment(direction, false)
+            self.moving[direction] = nil
+        end
+    end
+    for direction, active in pairs(desired) do
+        if active and not self.moving[direction] then
+            self.recorder:SetActive(direction, true)
+            self.api:Increment(direction, true)
+            self.moving[direction] = true
         end
     end
 end

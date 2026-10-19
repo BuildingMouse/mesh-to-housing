@@ -146,7 +146,7 @@ function Window.New(settings, uiState)
         function() self:StartCalibration() end, function(message)
         self:SetStatus(message)
         self:Lock(self.placement:Busy())
-    end)
+    end, function() self:StartCalibrationTest() end)
 
     self.start = UI.Button(self.content, "Start", 18, 525, 95, function() self:StartPlacement() end)
     self.abort = UI.Button(self.content, "Abort", 121, 525, 95, function() self:EndPlacement() end)
@@ -298,8 +298,13 @@ function Window:StartCapture()
 end
 
 function Window:StartCalibration()
-    if self:Busy() or not self:ValidRotationSettings() then return end
+    if self:Busy() or (self.calibration.settings.kind ~= "size" and not self:ValidRotationSettings()) then return end
     self.calibration:Start(self:MotionProfile())
+end
+
+function Window:StartCalibrationTest()
+    if self:Busy() or (self.calibration.settings.kind == "pivot" and not self:ValidRotationSettings()) then return end
+    self.calibration:StartTest(self:MotionProfile())
 end
 
 function Window:ValidRotationSettings()
