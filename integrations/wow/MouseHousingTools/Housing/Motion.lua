@@ -28,16 +28,22 @@ end
 function Motion:MoveIntoPlace(target, options, guid, done, onPhase)
     options = options or {}
     local pivot, rotationPivots = options.pivot, options.rotationPivots
+    local rotationAxes = options.rotationAxes
     if options.decorID then
         pivot = MHT.ItemProfiles.Pivot(options.decorID)
         rotationPivots = {}
         for _, axis in ipairs({ "x", "y", "z" }) do
             rotationPivots[axis] = MHT.ItemProfiles.Pivot(options.decorID, axis, self.measurements)
         end
+        rotationAxes = MHT.RotationAxes.ForItem(options.decorID, self.measurements)
     end
-    local item = MHT.Transform.Translation(options.from, target, pivot, rotationPivots)
-    item.scale = target.scale or 1
-    item.rotation = MHT.Transform.RotationDelta(options.from or {}, target)
+    local item = MHT.Transform.Translation(options.from, target, pivot, rotationPivots, rotationAxes)
+    -- Keep the measured copy pose when its size is already correct. Even an
+    -- empty Scale phase would otherwise reset engine state before rotation.
+    local sourceScale = options.from and options.from.scale or 1
+    local targetScale = target.scale or 1
+    if targetScale ~= sourceScale then item.scale = targetScale end
+    item.rotation = MHT.Transform.RotationDelta(options.from or {}, target, rotationAxes)
     self:Apply(item, options.motionProfile, guid, done, false, onPhase)
 end
 

@@ -13,22 +13,26 @@ function CalibrationPanel.New(parent, api, capture, settings, start, notify, tes
     UI.Text(self.frame, "Calibrate a rectangular block", 18, 105, 740, "GameFontNormalLarge")
     self.pivot = UI.Button(self.frame, "Rotation pivot", 18, 140, 130, function() self:Kind("pivot") end)
     self.size = UI.Button(self.frame, "Item size", 156, 140, 110, function() self:Kind("size") end)
+    self.rotationAxes = UI.Button(self.frame, "Rotation axes", 274, 140, 145, function() self:Kind("axes") end)
     self.axes = {}
     for i, coordinate in ipairs({ "x", "y", "z" }) do
         local axis = coordinate
-        self.axes[axis] = UI.Button(self.frame, axis:upper(), 310 + (i - 1) * 60, 140, 50,
+        self.axes[axis] = UI.Button(self.frame, axis:upper(), 475 + (i - 1) * 60, 140, 50,
             function() settings.axis = axis; self:Refresh() end)
     end
-    self.workflow = UI.Check(self.frame, "Move the first copy aside before placing the second", 18, 180,
+    local body = CreateFrame("Frame", nil, self.frame)
+    body:SetAllPoints(self.frame)
+    self.measurementFrame = body
+    self.workflow = UI.Check(body, "Move the first copy aside before placing the second", 18, 180,
         settings.workflow == "aside", function(checked) settings.workflow = checked and "aside" or "double"; self:Refresh() end)
-    self.guide = UI.Text(self.frame, "", 18, 220, 740)
-    self.item = UI.Text(self.frame, "No item measured yet.", 18, 285, 740)
-    UI.Text(self.frame, "Measured / saved result", 55, 302, 450)
-    self.trialHeading = UI.Text(self.frame, "Trial pivot (movement units)", 555, 302, 220)
+    self.guide = UI.Text(body, "", 18, 220, 740)
+    self.item = UI.Text(body, "No item measured yet.", 18, 285, 740)
+    UI.Text(body, "Measured / saved result", 55, 302, 450)
+    self.trialHeading = UI.Text(body, "Trial pivot (movement units)", 555, 302, 220)
     for i, axis in ipairs({ "x", "y", "z" }) do
-        UI.Text(self.frame, axis:upper(), 18, 322 + (i - 1) * 34, 30)
-        self.values[axis] = UI.Text(self.frame, "", 55, 322 + (i - 1) * 34, 480)
-        local edit = CreateFrame("EditBox", nil, self.frame, "InputBoxTemplate")
+        UI.Text(body, axis:upper(), 18, 322 + (i - 1) * 34, 30)
+        self.values[axis] = UI.Text(body, "", 55, 322 + (i - 1) * 34, 480)
+        local edit = CreateFrame("EditBox", nil, body, "InputBoxTemplate")
         edit:SetPoint("TOPLEFT", 560, -316 - (i - 1) * 34)
         edit:SetSize(155, 22)
         edit:SetAutoFocus(false)
@@ -48,17 +52,21 @@ function CalibrationPanel.New(parent, api, capture, settings, start, notify, tes
         end)
         self.trialInputs[axis] = edit
     end
-    self.detail = UI.Text(self.frame, "", 18, 430, 740)
-    self.startButton = UI.Button(self.frame, "Measure", 18, 480, 95, start)
-    self.nextButton = UI.Button(self.frame, "Start measurement", 121, 480, 170, function() self:Advance() end)
-    self.stopButton = UI.Button(self.frame, "End", 299, 480, 95, function() self:Abort() end)
-    self.loadButton = UI.Button(self.frame, "Load saved", 18, 515, 120, function() self:LoadSaved() end)
-    self.testButton = UI.Button(self.frame, "Automatic test", 146, 515, 140,
+    self.detail = UI.Text(body, "", 18, 430, 740)
+    self.startButton = UI.Button(body, "Measure", 18, 480, 95, start)
+    self.nextButton = UI.Button(body, "Start measurement", 121, 480, 170, function() self:Advance() end)
+    self.stopButton = UI.Button(body, "End", 299, 480, 95, function() self:Abort() end)
+    self.loadButton = UI.Button(body, "Load saved", 18, 515, 120, function() self:LoadSaved() end)
+    self.testButton = UI.Button(body, "Automatic test", 146, 515, 140,
         test or function() self:StartTest(MHT.Motion.StandardProfile) end)
-    self.saveButton = UI.Button(self.frame, "Save pivot", 294, 515, 110, function() self:SaveTrial() end)
-    self.saveHint = UI.Text(self.frame, "Trial values stay temporary until Save pivot.", 420, 521, 350)
+    self.saveButton = UI.Button(body, "Save pivot", 294, 515, 110, function() self:SaveTrial() end)
+    self.saveHint = UI.Text(body, "Trial values stay temporary until Save pivot.", 420, 521, 350)
     self.controller = MHT.Calibration.New(api, capture, settings.measurements, function(message)
         self.message = message
+        self:Refresh()
+        notify(message)
+    end)
+    self.axisPanel = MHT.RotationCalibrationPanel.New(self.frame, api, settings, start, function(message)
         self:Refresh()
         notify(message)
     end)
@@ -67,7 +75,7 @@ function CalibrationPanel.New(parent, api, capture, settings, start, notify, tes
 end
 
 function CalibrationPanel:Busy()
-    return self.controller:Busy()
+    return self.controller:Busy() or self.axisPanel.controller:Busy()
 end
 
 function CalibrationPanel:Kind(kind)
@@ -75,9 +83,16 @@ function CalibrationPanel:Kind(kind)
     if self:GetDraft() and not self:ReadTrialInputs() then return end
     self.settings.kind = kind
     self:Refresh()
+    if kind == "axes" then self.notify("Choose an axis. In Advanced mode, select a placed copy and Start, or Start then click it.") end
 end
 
 function CalibrationPanel:Start(profile)
+    if self.settings.kind == "axes" then
+        local c = self.axisPanel.controller
+        local ok, started, reason = pcall(c.Start, c, self.settings.axis, profile)
+        if not ok then c:Abort(tostring(started)) elseif not started then self.notify(reason) end
+        return
+    end
     if self:GetDraft() and not self:ReadTrialInputs() then return end
     local s = self.settings
     local ok, started, reason = pcall(self.controller.Start, self.controller, s.kind, s.axis, s.workflow, profile)
@@ -92,6 +107,7 @@ end
 function CalibrationPanel:GetDraft()
     local c = self.controller
     if not c then return nil end
+    if self.settings.kind == "axes" then return nil end
     if self.settings.kind == "size" then return c.sizeDraft end
     return c.draft and c.draft.axis == self.settings.axis and c.draft or nil
 end
@@ -140,16 +156,19 @@ function CalibrationPanel:SaveTrial()
 end
 
 function CalibrationPanel:Abort(message)
-    self.controller:Abort(message)
+    if self.axisPanel.controller:Busy() or self.settings.kind == "axes" then self.axisPanel.controller:Abort(message)
+    else self.controller:Abort(message) end
 end
 
 function CalibrationPanel:Update(elapsed)
     self.controller:Update(elapsed)
+    self.axisPanel.controller:Update(elapsed)
     if self:Busy() then self:Refresh() end
 end
 
 function CalibrationPanel:OnEvent(event, ...)
     self.controller:OnEvent(event, ...)
+    self.axisPanel.controller:OnEvent(event, ...)
 end
 
 function CalibrationPanel:SetBlocked(blocked)
@@ -163,7 +182,12 @@ function CalibrationPanel:Refresh()
     local locked = self.blocked or busy
     self.pivot:SetEnabled(not locked and s.kind ~= "pivot")
     self.size:SetEnabled(not locked and s.kind ~= "size")
+    self.rotationAxes:SetEnabled(not locked and s.kind ~= "axes")
     for axis, button in pairs(self.axes) do button:SetEnabled(not locked and s.axis ~= axis) end
+    local axes = s.kind == "axes"
+    self.measurementFrame:SetShown(not axes)
+    self.axisPanel.frame:SetShown(axes)
+    if axes then self.axisPanel:Refresh(self.blocked); return end
     self.workflow:SetEnabled(not locked)
     self.startButton:SetEnabled(not locked)
     self.stopButton:SetEnabled(busy)

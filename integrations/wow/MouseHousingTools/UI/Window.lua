@@ -345,7 +345,9 @@ function Window:Mode(mode)
     self.calibrationTab:SetEnabled(mode ~= "calibration")
     if mode == "test" then self:SetStatus("Set shift and rotation, then Start and click an item in Advanced mode.") end
     if mode == "capture" then self:SetStatus("Select an item in Advanced mode, then Start to capture movement keys.") end
-    if mode == "calibration" then self:SetStatus("Choose a test and axis. Deselect the item, then Start and hover the source.") end
+    if mode == "calibration" then self:SetStatus(self.calibration.settings.kind == "axes"
+        and "Choose an axis. In Advanced mode, select a placed copy and Start, or Start then click it."
+        or "Choose a test and axis. Deselect the item, then Start and hover the source.") end
 end
 
 function Window:Lock(busy)
