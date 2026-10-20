@@ -111,6 +111,8 @@ function Window.New(settings, uiState)
         self.testChoices[id] = UI.Button(self.testsFrame, case.name, 146 + (i - 1) * 145, 82, 137,
             function() self:TestCase(id) end)
     end
+    self.testChoices.resize = UI.Button(self.testsFrame, "Resize", 581, 82, 137,
+        function() self:TestCase("resize") end)
     self.testContent = CreateFrame("Frame", nil, self.testsFrame)
     self.testContent:SetAllPoints(self.testsFrame)
     self.figures = MHT.TestFiguresPanel.New(self.testsFrame,
@@ -161,6 +163,10 @@ function Window.New(settings, uiState)
         self:SetStatus(message)
         self:Lock(self.placement:Busy())
     end, function() self:StartCalibrationTest() end)
+    uiState.resizeTest = uiState.resizeTest or {}
+    self.resizeTest = MHT.ResizeTestPanel.New(self.testsFrame, self.calibration.resizePanel.controller,
+        uiState.resizeTest, uiState.calibration, function() self:StartResizeTest() end,
+        function() self:EndPlacement() end, function(message) self:SetStatus(message) end)
     self.corners = MHT.CornerTestPanel.New(frame, MHT.Housing, uiState.calibration.measurements,
         function(id) self:StartCornerTest(id) end, function(message, completed, total)
         self:SetStatus(message, completed, total)
@@ -190,6 +196,7 @@ function Window:Update(elapsed)
     self.capture:Update(elapsed)
     self.placement:Update(elapsed)
     self.calibration:Update(elapsed)
+    if self.calibration.resizePanel.controller:Busy() then self.resizeTest:Refresh(true) end
     self.corners:Update(elapsed)
 end
 
@@ -257,7 +264,9 @@ end
 function Window:StartPlacement()
     if self:Busy() then return end
     if self.mode == "test" then
-        if self.testCase == "transform" then self:StartTest() else self:StartFigureTest() end
+        if self.testCase == "transform" then self:StartTest()
+        elseif self.testCase == "resize" then self:StartResizeTest()
+        else self:StartFigureTest() end
         return
     end
     if self.mode == "capture" then self:StartCapture(); return end
@@ -324,7 +333,8 @@ end
 
 function Window:TestCase(id)
     if self:Busy() then return end
-    if id ~= "transform" and not self.figures:Select(id) then return end
+    if id ~= "transform" and id ~= "resize" and not self.figures:Select(id) then return end
+    if id == "resize" then self.resizeTest:Preview() end
     self.testCase = id
     self:Mode("test")
     self:Lock(false)
@@ -339,8 +349,21 @@ function Window:StartFigureTest()
 end
 
 function Window:StartCalibration()
-    if self:Busy() or (self.calibration.settings.kind ~= "size" and not self:ValidRotationSettings()) then return end
+    local kind = self.calibration.settings.kind
+    if self:Busy() or ((kind == "pivot" or kind == "axes") and not self:ValidRotationSettings()) then return end
     self.calibration:Start(self:MotionProfile())
+end
+
+function Window:StartResizeTest()
+    if self:Busy() then return end
+    local percent = self.uiState.resizeTest.percent
+    if type(percent) ~= "number" or percent ~= percent or percent < 20 or percent > 200 then
+        self:SetStatus("Item size must be between 20% and 200%."); return
+    end
+    local c = self.calibration.resizePanel.controller
+    local ok, started, reason = pcall(c.Start, c, "corners", self.calibration.settings.workflow,
+        self:MotionProfile(), percent / 100)
+    if not ok then c:Abort(tostring(started)) elseif not started then self:SetStatus(reason) end
 end
 
 function Window:StartCalibrationTest()
@@ -385,7 +408,8 @@ function Window:Mode(mode)
     self.objects:SetShown(mode == "objects")
     self.testsFrame:SetShown(mode == "test")
     self.testContent:SetShown(mode == "test" and self.testCase == "transform")
-    self.figures.frame:SetShown(mode == "test" and self.testCase ~= "transform")
+    self.figures.frame:SetShown(mode == "test" and self.testCase ~= "transform" and self.testCase ~= "resize")
+    self.resizeTest.frame:SetShown(mode == "test" and self.testCase == "resize")
     self.capture.frame:SetShown(mode == "capture")
     self.calibration.frame:SetShown(mode == "calibration")
     self.corners.frame:SetShown(mode == "corners")
@@ -431,6 +455,7 @@ function Window:Lock(busy)
     self.testTab:SetEnabled(not busy and self.mode ~= "test")
     for id, button in pairs(self.testChoices) do button:SetEnabled(not busy and self.testCase ~= id) end
     self.figures:SetBlocked(busy)
+    self.resizeTest:Refresh(busy)
     self.captureTab:SetEnabled(not busy and self.mode ~= "capture")
     self.calibrationTab:SetEnabled(not busy and self.mode ~= "calibration")
     self.cornersTab:SetEnabled(not busy and self.mode ~= "corners")

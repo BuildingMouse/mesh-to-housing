@@ -17,14 +17,17 @@ Housing\RotationCalibration.lua
 Housing\CornerTest.lua
 Housing\MovementCapture.lua
 Housing\Calibration.lua
+Housing\ResizeCalibration.lua
 Housing\Placement.lua
 UI\Widgets.lua
 UI\Preview.lua
 UI\MovementCapture.lua
 UI\RotationCalibration.lua
+UI\ResizeCalibration.lua
 UI\Calibration.lua
 UI\CornerTest.lua
 UI\TestFigures.lua
+UI\ResizeTest.lua
 UI\Window.lua
 UI\EditorControls.lua
 Init.lua
