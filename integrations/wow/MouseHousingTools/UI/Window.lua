@@ -41,6 +41,7 @@ function Window.New(settings, uiState)
     self.testTab = UI.Button(frame, "Transform test", 274, 46, 130, function() self:Mode("test") end)
     self.captureTab = UI.Button(frame, "Movement capture", 412, 46, 145, function() self:Mode("capture") end)
     self.calibrationTab = UI.Button(frame, "Calibrate", 565, 46, 120, function() self:Mode("calibration") end)
+    self.cornersTab = UI.Button(frame, "Corner test", 693, 46, 100, function() self:Mode("corners") end)
 
     self.objects = CreateFrame("Frame", nil, frame)
     self.objects:SetAllPoints(frame)
@@ -53,7 +54,6 @@ function Window.New(settings, uiState)
 
     self.stairs = UI.Button(self.content, "Stairs", 18, 82, 120, function() settings.shape = "stairs"; self:Refresh() end)
     self.circle = UI.Button(self.content, "Circle", 146, 82, 120, function() settings.shape = "circle"; self:Refresh() end)
-
     local fields = {
         { "count", "Items" }, { "rotation", "Item rotation (deg)" },
         { "slope", "Stair slope (deg)" }, { "spacing", "Straight step spacing" },
@@ -147,6 +147,11 @@ function Window.New(settings, uiState)
         self:SetStatus(message)
         self:Lock(self.placement:Busy())
     end, function() self:StartCalibrationTest() end)
+    self.corners = MHT.CornerTestPanel.New(frame, MHT.Housing, uiState.calibration.measurements,
+        function(id) self:StartCornerTest(id) end, function(message, completed, total)
+        self:SetStatus(message, completed, total)
+        self:Lock(self.placement:Busy())
+    end)
 
     self.start = UI.Button(self.content, "Start", 18, 525, 95, function() self:StartPlacement() end)
     self.abort = UI.Button(self.content, "Abort", 121, 525, 95, function() self:EndPlacement() end)
@@ -164,19 +169,21 @@ function Window.New(settings, uiState)
 end
 
 function Window:Busy()
-    return self.placement:Busy() or self.capture:Busy() or self.calibration:Busy()
+    return self.placement:Busy() or self.capture:Busy() or self.calibration:Busy() or self.corners:Busy()
 end
 
 function Window:Update(elapsed)
     self.capture:Update(elapsed)
     self.placement:Update(elapsed)
     self.calibration:Update(elapsed)
+    self.corners:Update(elapsed)
 end
 
 function Window:OnEvent(event, ...)
     self.capture:OnEvent(event, ...)
     self.placement:OnEvent(event, ...)
     self.calibration:OnEvent(event, ...)
+    self.corners:OnEvent(event, ...)
 end
 
 function Window:SavePosition()
@@ -238,6 +245,7 @@ function Window:StartPlacement()
     if self.mode == "test" then self:StartTest(); return end
     if self.mode == "capture" then self:StartCapture(); return end
     if self.mode == "calibration" then self:StartCalibration(); return end
+    if self.mode == "corners" then self:StartCornerTest(); return end
 
     self:Mode("shapes")
     self:Refresh()
@@ -307,6 +315,11 @@ function Window:StartCalibrationTest()
     self.calibration:StartTest(self:MotionProfile())
 end
 
+function Window:StartCornerTest(id)
+    if self:Busy() or not self:ValidRotationSettings() then return end
+    self.corners:Start(id, self:MotionProfile())
+end
+
 function Window:ValidRotationSettings()
     local s = self.testSettings
     if type(s.rotate) ~= "number" or s.rotate ~= s.rotate or s.rotate <= 0 or s.rotate > 3600 then
@@ -321,7 +334,9 @@ function Window:ValidRotationSettings()
 end
 
 function Window:EndPlacement(message)
-    if self.calibration:Busy() then
+    if self.corners:Busy() then
+        self.corners:Abort(message)
+    elseif self.calibration:Busy() then
         self.calibration:Abort(message)
     elseif self.capture:Busy() or self.capture.bindingsInstalled then
         self.capture:Stop(message)
@@ -338,11 +353,17 @@ function Window:Mode(mode)
     self.testContent:SetShown(mode == "test")
     self.capture.frame:SetShown(mode == "capture")
     self.calibration.frame:SetShown(mode == "calibration")
+    self.corners.frame:SetShown(mode == "corners")
     self.shapesTab:SetEnabled(mode ~= "shapes")
     self.objectsTab:SetEnabled(mode ~= "objects")
     self.testTab:SetEnabled(mode ~= "test")
     self.captureTab:SetEnabled(mode ~= "capture")
     self.calibrationTab:SetEnabled(mode ~= "calibration")
+    self.cornersTab:SetEnabled(mode ~= "corners")
+    if mode == "corners" then
+        self.corners:Refresh(true)
+        self:SetStatus("Run a named test, click the tile, then corners 1, 2, 3, 4. Restore the starting layout between cases.")
+    end
     if mode == "test" then self:SetStatus("Set shift and rotation, then Start and click an item in Advanced mode.") end
     if mode == "capture" then self:SetStatus("Select an item in Advanced mode, then Start to capture movement keys.") end
     if mode == "calibration" then self:SetStatus(self.calibration.settings.kind == "axes"
@@ -352,10 +373,13 @@ end
 
 function Window:Lock(busy)
     local calibrating = self.calibration and self.calibration:Busy()
-    self.capture:SetBlocked(busy or calibrating)
-    if self.calibration then self.calibration:SetBlocked(busy or (self.capture:Busy() and not calibrating)) end
+    local corners = self.corners and self.corners:Busy()
+    self.capture:SetBlocked(busy or calibrating or corners)
+    if self.calibration then self.calibration:SetBlocked(busy or corners or (self.capture:Busy() and not calibrating)) end
+    if self.corners then self.corners:SetBlocked(busy or calibrating or self.capture:Busy()) end
     busy = busy or calibrating
     busy = busy or self.capture:Busy()
+    busy = busy or corners
     for _, control in ipairs(self.controls) do control:SetEnabled(not busy) end
 
     local stairs = self.settings.shape == "stairs"
@@ -370,6 +394,7 @@ function Window:Lock(busy)
     self.testTab:SetEnabled(not busy and self.mode ~= "test")
     self.captureTab:SetEnabled(not busy and self.mode ~= "capture")
     self.calibrationTab:SetEnabled(not busy and self.mode ~= "calibration")
+    self.cornersTab:SetEnabled(not busy and self.mode ~= "corners")
     for _, control in ipairs(self.testInputs) do control:SetEnabled(not busy) end
     self.testStart:SetEnabled(not busy)
     self.testAbort:SetEnabled(busy)

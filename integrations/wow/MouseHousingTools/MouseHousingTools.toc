@@ -11,6 +11,7 @@ Housing\RotationAxes.lua
 Housing\Transform.lua
 Housing\Motion.lua
 Housing\RotationCalibration.lua
+Housing\CornerTest.lua
 Housing\MovementCapture.lua
 Housing\Calibration.lua
 Housing\Placement.lua
@@ -19,6 +20,7 @@ UI\Preview.lua
 UI\MovementCapture.lua
 UI\RotationCalibration.lua
 UI\Calibration.lua
+UI\CornerTest.lua
 UI\Window.lua
 UI\EditorControls.lua
 Init.lua
