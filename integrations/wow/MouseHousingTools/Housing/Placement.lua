@@ -5,6 +5,15 @@ MHT.Placement = Placement
 
 -- Cooldown starts after the game confirms placement.
 local BATCH_COPY_DELAY = 0.2
+local THROTTLED_COPY_DELAY = 1
+local MAX_COPY_RETRIES = 3
+
+local function resultName(result)
+    for name, value in pairs(Enum.HousingResult or {}) do
+        if value == result then return name end
+    end
+    return "Unknown housing error"
+end
 
 Placement.DEFAULT_WORKFLOW = "batch"
 
@@ -53,6 +62,7 @@ function Placement:Start(plan, profile, workflow)
     self.isTest = false
 
     self.copiesCreated = 0
+    self.copyDelay, self.copyRetries, self.retryDelay = BATCH_COPY_DELAY, 0, nil
 
     self.completed = 0
 
@@ -113,7 +123,7 @@ function Placement:Abort(message)
     local selected = self.api:Available() and self.api:Selected()
     local ownEditing = false
 
-    if (self.state == "copy" or self.state == "placing") and self.api:Available()
+    if (self.state == "copy" or self.state == "placing" or self.state == "throttled") and self.api:Available()
         and self.api:Mode() == Enum.HouseEditorMode.BasicDecor
         and self.api:HasPendingCopy() then
         ownEditing = true
@@ -220,6 +230,7 @@ function Placement:HandleSelectedCopy(selected)
     self.activeGUID = guid
 
     self.activeIndex = self.completed + 1
+    local target = self.plan.items[self.activeIndex]
 
     self:SetState(
         "moving",
@@ -235,9 +246,9 @@ function Placement:HandleSelectedCopy(selected)
         self.api:Commit()
     end
     local function onPhase(label)
-        self:SetState("moving", label .. (self.isTest and " (test)..." or " selected copy..."))
+        self:SetState("moving", label .. (self.isTest and " (test)..." or " selected copy...")
+            .. (target.label and (" " .. target.label) or ""))
     end
-    local target = self.plan.items[self.activeIndex]
     if self.isTest then
         self.motion:Apply(target, self.profile, guid, done, true, onPhase)
     else
@@ -283,6 +294,12 @@ function Placement:Update(elapsed)
         if self.still < 1.2 then return end
 
         if self.state == "arming" then
+            local solid = MHT.Layout.Solids[self.plan.shape]
+            if solid then
+                local plan, reason = solid.ForItem(self.plan, hovered.decorID, self.motion.measurements)
+                if not plan then self:Abort(reason); return end
+                self.plan = plan
+            end
             local stock, reason = self.api:CheckStock(hovered, #self.plan.items)
             if not stock then self:Abort(reason); return end
             self.source = hovered
@@ -308,10 +325,27 @@ function Placement:Update(elapsed)
         end
 
     elseif self.state == "nextcopy" then
-        if self.age >= BATCH_COPY_DELAY
+        if self.age >= self.copyDelay
             and self.api:Mode() == Enum.HouseEditorMode.BasicDecor
             and not self.api:HasPendingCopy() then
             self:BeginCopy()
+        end
+
+    elseif self.state == "throttled" then
+        if self.api:Mode() ~= Enum.HouseEditorMode.BasicDecor then
+            self:Abort("Editor mode changed while waiting to retry the copy.")
+        elseif self.age >= self.retryDelay then
+            if self.api:HasPendingCopy() then
+                local pending = self.api:PendingInfo()
+                if pending and (not pending.decorID or pending.decorID == self.source.decorID) then
+                    self:SetState("placing", "Retrying the pending copy after WoW's request limit...")
+                    self.api:PlaceCopy()
+                else
+                    self:Abort("The pending item changed while waiting to retry the copy.")
+                end
+            else
+                self:BeginCopy()
+            end
         end
 
     elseif self.state == "copy" then
@@ -368,7 +402,27 @@ function Placement:OnEvent(event, ...)
     end
 
     if event == "HOUSE_EDITOR_MODE_CHANGE_FAILURE" or event == "HOUSING_DECOR_PLACE_FAILURE" then
-        self:Abort("The game rejected the placement or mode change (" .. tostring((...)) .. ").")
+        local result = ...
+        local name = resultName(result)
+        local limited = name == "TooManyRequests"
+        if event == "HOUSING_DECOR_PLACE_FAILURE" and limited then
+            if self.state == "throttled" then return end
+            if self.state == "copy" or self.state == "placing" then
+                self.copyRetries = self.copyRetries + 1
+                if self.copyRetries <= MAX_COPY_RETRIES then
+                    self.copyDelay, self.retryDelay = THROTTLED_COPY_DELAY, 2 ^ self.copyRetries
+                    self:SetState("throttled", string.format(
+                        "WoW's housing request limit reached. Waiting %d seconds before retrying copy %d / %d. Keep the mouse still.",
+                        self.retryDelay, self.copiesCreated + 1, #self.plan.items))
+                    return
+                end
+            end
+        end
+        local action = event == "HOUSE_EDITOR_MODE_CHANGE_FAILURE" and "changing housing mode"
+            or self.state == "committing" and "saving the moved item" or "placing a copy"
+        self:Abort(limited and ("WoW is limiting housing requests. Wait a few seconds before trying again. ("
+            .. name .. ", " .. tostring(result) .. ")")
+            or ("WoW rejected " .. action .. ": " .. name .. " (" .. tostring(result) .. ")."))
         return
     end
 
@@ -377,8 +431,9 @@ function Placement:OnEvent(event, ...)
     local guid, _, isNew, isPreview = ...
     if isPreview then return end
 
-    if self.state == "placing" and isNew then
+    if (self.state == "placing" or self.state == "throttled") and isNew then
         self.copiesCreated = self.copiesCreated + 1
+        self.copyRetries, self.retryDelay = 0, nil
         self.createdGUID = guid
 
         if self.workflow == "repeat" then
@@ -390,7 +445,7 @@ function Placement:OnEvent(event, ...)
                     "Created copy %d / %d. Waiting %.2fs before the next copy...",
                     self.copiesCreated,
                     #self.plan.items,
-                    BATCH_COPY_DELAY
+                    self.copyDelay
                 )
             )
         else

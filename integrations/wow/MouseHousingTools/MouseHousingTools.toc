@@ -4,6 +4,9 @@
 ## Version: 0.1.1
 ## SavedVariables: MouseHousingToolsDB
 
+Shapes\Cube.lua
+Shapes\Rhombicosidodecahedron.lua
+Shapes\TiltedCircle.lua
 Shapes\Layout.lua
 Housing\API.lua
 Housing\ItemProfiles.lua
@@ -21,6 +24,7 @@ UI\MovementCapture.lua
 UI\RotationCalibration.lua
 UI\Calibration.lua
 UI\CornerTest.lua
+UI\TestFigures.lua
 UI\Window.lua
 UI\EditorControls.lua
 Init.lua

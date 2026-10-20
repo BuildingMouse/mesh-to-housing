@@ -10,6 +10,7 @@ end
 
 function Window.New(settings, uiState)
     uiState = uiState or {}
+    if MHT.Layout.Solids[settings.shape] then settings.shape = "stairs" end
 
     local self = setmetatable({ settings = settings, uiState = uiState,
                                controls = {}, inputs = {} }, Window)
@@ -38,7 +39,7 @@ function Window.New(settings, uiState)
 
     self.shapesTab = UI.Button(frame, "Shapes", 18, 46, 120, function() self:Mode("shapes") end)
     self.objectsTab = UI.Button(frame, "3D Objects", 146, 46, 120, function() self:Mode("objects") end)
-    self.testTab = UI.Button(frame, "Transform test", 274, 46, 130, function() self:Mode("test") end)
+    self.testTab = UI.Button(frame, "Tests", 274, 46, 130, function() self:Mode("test") end)
     self.captureTab = UI.Button(frame, "Movement capture", 412, 46, 145, function() self:Mode("capture") end)
     self.calibrationTab = UI.Button(frame, "Calibrate", 565, 46, 120, function() self:Mode("calibration") end)
     self.cornersTab = UI.Button(frame, "Corner test", 693, 46, 100, function() self:Mode("corners") end)
@@ -100,8 +101,20 @@ function Window.New(settings, uiState)
     self.summary = UI.Text(self.content, "", 302, 510, 490)
     self.status = UI.Text(frame, "", 18, 563, 774)
 
-    self.testContent = CreateFrame("Frame", nil, frame)
-    self.testContent:SetAllPoints(frame)
+    self.testsFrame = CreateFrame("Frame", nil, frame)
+    self.testsFrame:SetAllPoints(frame)
+    self.testCase, self.testChoices = "transform", {}
+    self.testChoices.transform = UI.Button(self.testsFrame, "Transform", 18, 82, 120,
+        function() self:TestCase("transform") end)
+    for i, case in ipairs(MHT.TestFiguresPanel.Cases) do
+        local id = case.id
+        self.testChoices[id] = UI.Button(self.testsFrame, case.name, 146 + (i - 1) * 145, 82, 137,
+            function() self:TestCase(id) end)
+    end
+    self.testContent = CreateFrame("Frame", nil, self.testsFrame)
+    self.testContent:SetAllPoints(self.testsFrame)
+    self.figures = MHT.TestFiguresPanel.New(self.testsFrame,
+        function() self:StartFigureTest() end, function() self:EndPlacement() end)
     uiState.transformTest = uiState.transformTest or {}
     self.testSettings = uiState.transformTest
     -- Replace the old unmeasured 90 deg/sec default once; retain custom speeds.
@@ -136,6 +149,7 @@ function Window.New(settings, uiState)
     self.placement = MHT.Placement.New(MHT.Housing, function(message, completed, total)
         self:SetStatus(message, completed, total)
         self.progress:SetText(total > 0 and string.format("%d / %d", completed, total) or "")
+        self.figures.progress:SetText(total > 0 and string.format("%d / %d", completed, total) or "")
         self:Lock(self.placement:Busy())
     end, uiState.calibration.measurements)
     self.capture = MHT.CapturePanel.New(frame, MHT.Housing, function() self:StartCapture() end, function(message)
@@ -242,7 +256,10 @@ end
 
 function Window:StartPlacement()
     if self:Busy() then return end
-    if self.mode == "test" then self:StartTest(); return end
+    if self.mode == "test" then
+        if self.testCase == "transform" then self:StartTest() else self:StartFigureTest() end
+        return
+    end
     if self.mode == "capture" then self:StartCapture(); return end
     if self.mode == "calibration" then self:StartCalibration(); return end
     if self.mode == "corners" then self:StartCornerTest(); return end
@@ -305,6 +322,22 @@ function Window:StartCapture()
     end
 end
 
+function Window:TestCase(id)
+    if self:Busy() then return end
+    if id ~= "transform" and not self.figures:Select(id) then return end
+    self.testCase = id
+    self:Mode("test")
+    self:Lock(false)
+end
+
+function Window:StartFigureTest()
+    if self:Busy() or not self:ValidRotationSettings() then return end
+    local ok, started, reason = pcall(self.placement.Start, self.placement,
+        self.figures.plan, self:MotionProfile(), self.settings.placementWorkflow)
+    if not ok then self.placement:Abort(tostring(started))
+    elseif not started then self:SetStatus(reason) end
+end
+
 function Window:StartCalibration()
     if self:Busy() or (self.calibration.settings.kind ~= "size" and not self:ValidRotationSettings()) then return end
     self.calibration:Start(self:MotionProfile())
@@ -350,7 +383,9 @@ function Window:Mode(mode)
     self.mode = mode
     self.content:SetShown(mode == "shapes")
     self.objects:SetShown(mode == "objects")
-    self.testContent:SetShown(mode == "test")
+    self.testsFrame:SetShown(mode == "test")
+    self.testContent:SetShown(mode == "test" and self.testCase == "transform")
+    self.figures.frame:SetShown(mode == "test" and self.testCase ~= "transform")
     self.capture.frame:SetShown(mode == "capture")
     self.calibration.frame:SetShown(mode == "calibration")
     self.corners.frame:SetShown(mode == "corners")
@@ -364,7 +399,9 @@ function Window:Mode(mode)
         self.corners:Refresh(true)
         self:SetStatus("Run a named test, click the tile, then corners 1, 2, 3, 4. Restore the starting layout between cases.")
     end
-    if mode == "test" then self:SetStatus("Set shift and rotation, then Start and click an item in Advanced mode.") end
+    if mode == "test" then self:SetStatus(self.testCase == "transform"
+        and "Set shift and rotation, then Start and click an item in Advanced mode."
+        or "Start the test, then hover a calibrated tile at 100% size. Keep still while copies are created.") end
     if mode == "capture" then self:SetStatus("Select an item in Advanced mode, then Start to capture movement keys.") end
     if mode == "calibration" then self:SetStatus(self.calibration.settings.kind == "axes"
         and "Choose an axis. In Advanced mode, select a placed copy and Start, or Start then click it."
@@ -392,6 +429,8 @@ function Window:Lock(busy)
     self.objectsTab:SetEnabled(not busy)
     self.shapesTab:SetEnabled(not busy and self.mode ~= "shapes")
     self.testTab:SetEnabled(not busy and self.mode ~= "test")
+    for id, button in pairs(self.testChoices) do button:SetEnabled(not busy and self.testCase ~= id) end
+    self.figures:SetBlocked(busy)
     self.captureTab:SetEnabled(not busy and self.mode ~= "capture")
     self.calibrationTab:SetEnabled(not busy and self.mode ~= "calibration")
     self.cornersTab:SetEnabled(not busy and self.mode ~= "corners")

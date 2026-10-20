@@ -2,6 +2,9 @@ local _, MHT = ...
 local Layout = {}
 MHT.Layout = Layout
 
+Layout.Solids = { cube = MHT.Cube, rhombicosidodecahedron = MHT.Rhombicosidodecahedron,
+    tilted_circle = MHT.TiltedCircle }
+
 Layout.defaults = {
     shape = "stairs", count = 12, scale = 1,
     width = 2, depth = 1, thickness = 0.25,
@@ -17,8 +20,8 @@ local ranges = {
 }
 
 function Layout.Validate(settings)
-    if settings.shape ~= "stairs" and settings.shape ~= "circle" then
-        return nil, "Choose stairs or circle."
+    if settings.shape ~= "stairs" and settings.shape ~= "circle" and not Layout.Solids[settings.shape] then
+        return nil, "Choose a shape."
     end
     for key, range in pairs(ranges) do
         local value = settings[key]
@@ -31,6 +34,17 @@ function Layout.Validate(settings)
 end
 
 function Layout.Corners(item, dimensions)
+    if item.rotation then
+        local corners = {}
+        for _, z in ipairs({ -1, 1 }) do
+            for _, xy in ipairs({ { -1, -1 }, { 1, -1 }, { 1, 1 }, { -1, 1 } }) do
+                local offset = MHT.Transform.PivotOffset(item,
+                    { x = xy[1] * dimensions[1] / 2, y = xy[2] * dimensions[2] / 2, z = z * dimensions[3] / 2 })
+                corners[#corners + 1] = { item.x + offset.x, item.y + offset.y, item.z + offset.z }
+            end
+        end
+        return corners
+    end
     local c, s = math.cos(item.yaw), math.sin(item.yaw)
     local corners = {}
     for _, z in ipairs({ -1, 1 }) do
@@ -49,6 +63,7 @@ end
 function Layout.Build(settings)
     local valid, reason = Layout.Validate(settings)
     if not valid then return nil, reason end
+    if Layout.Solids[settings.shape] then return Layout.Solids[settings.shape].Build(settings) end
     local items = {}
     local totalAngle = settings.turns * 2 * math.pi
     local run = settings.spacing
