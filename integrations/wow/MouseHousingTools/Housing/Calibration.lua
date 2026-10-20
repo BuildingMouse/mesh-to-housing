@@ -27,8 +27,6 @@ local function editedMeasurement(measurement, units)
     return result
 end
 
--- Keep the half-turn correction in movement coordinates. Rotation-axis names
--- do not tell us which movement coordinate can be discarded.
 function Calibration.Measure(kind, axis, correction, profile)
     local result = { kind = kind, axis = axis, ticks = {}, seconds = {}, units = {}, correction = correction }
     for coordinate, speed in pairs(axes) do
