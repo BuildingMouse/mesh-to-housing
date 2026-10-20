@@ -33,7 +33,7 @@ function ItemProfiles.Pivot(decorID, axis, measurements)
     return pivot
 end
 
-function ItemProfiles.CalibratedDimensions(decorID, measurements)
+function ItemProfiles.Dimensions(decorID, measurements)
     local item = measurements and measurements[decorID]
     local dimensions = {}
     for i, axis in ipairs({ "x", "y", "z" }) do
@@ -43,6 +43,27 @@ function ItemProfiles.CalibratedDimensions(decorID, measurements)
             return nil, "Save all three size measurements for this item before building this shape."
         end
         dimensions[i] = value
+    end
+    return dimensions
+end
+
+function ItemProfiles.ResizePivot(decorID, measurements)
+    local item = measurements and measurements[decorID]
+    local units = item and item.resizePivot and item.resizePivot.units
+    if units and finite(units.x) and finite(units.y) and finite(units.z) then
+        return { x = units.x, y = units.y, z = units.z }, true
+    end
+    local profile = ItemProfiles.ByDecorID[decorID]
+    local preset = profile and profile.resizePivot
+    if preset then return { x = preset.x or 0, y = preset.y or 0, z = preset.z or 0 } end
+    return ItemProfiles.Pivot(decorID)
+end
+
+function ItemProfiles.CalibratedDimensions(decorID, measurements)
+    local dimensions, reason = ItemProfiles.Dimensions(decorID, measurements)
+    if not dimensions then return nil, reason end
+    local item = measurements[decorID]
+    for _, axis in ipairs({ "x", "y", "z" }) do
         if not (item.pivot and item.pivot[axis] and item.pivot[axis].units) then
             return nil, "Save pivots for all three rotation axes before building this shape."
         end

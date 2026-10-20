@@ -30,7 +30,7 @@ function Motion:MoveIntoPlace(target, options, guid, done, onPhase)
     local pivot, rotationPivots = options.pivot, options.rotationPivots
     local rotationAxes = options.rotationAxes
     if options.decorID then
-        pivot = MHT.ItemProfiles.Pivot(options.decorID)
+        pivot = MHT.ItemProfiles.ResizePivot(options.decorID, self.measurements)
         rotationPivots = {}
         for _, axis in ipairs({ "x", "y", "z" }) do
             rotationPivots[axis] = MHT.ItemProfiles.Pivot(options.decorID, axis, self.measurements)

@@ -205,9 +205,13 @@ function Calibration:StartTest(axis, workflow, profile)
     return self:Start("pivot", axis, workflow, profile, true)
 end
 
+function Calibration:PrepareSource()
+    return true
+end
+
 function Calibration:Start(kind, axis, workflow, profile, automatic)
     if self:Busy() then return end
-    assert((kind == "pivot" or kind == "size") and axes[axis]
+    assert(((kind == "pivot" or kind == "size") and axes[axis] or kind == "resize")
         and (workflow == "double" or workflow == "aside"), "Choose a calibration test, axis and copy method.")
     if not self.api:Active() then return nil, "Open the housing editor first." end
     if self.api:IsSelected() then return nil, "Finish editing the selected item, then Start and hover the source." end
@@ -339,6 +343,8 @@ function Calibration:Update(elapsed)
         self.still = self.still + elapsed
         if self.still < 1.2 then return end
         if self.state == "arming" then
+            local ready, reason = self:PrepareSource(hovered)
+            if not ready then self:Abort(reason); return end
             local variants, reason = self.api:CalibrationCopies(hovered)
             if not variants then self:Abort(reason); return end
             self.copyVariants = variants

@@ -14,10 +14,11 @@ function CalibrationPanel.New(parent, api, capture, settings, start, notify, tes
     self.pivot = UI.Button(self.frame, "Rotation pivot", 18, 140, 130, function() self:Kind("pivot") end)
     self.size = UI.Button(self.frame, "Item size", 156, 140, 110, function() self:Kind("size") end)
     self.rotationAxes = UI.Button(self.frame, "Rotation axes", 274, 140, 145, function() self:Kind("axes") end)
+    self.resizePivot = UI.Button(self.frame, "Resize pivot", 427, 140, 130, function() self:Kind("resize") end)
     self.axes = {}
     for i, coordinate in ipairs({ "x", "y", "z" }) do
         local axis = coordinate
-        self.axes[axis] = UI.Button(self.frame, axis:upper(), 475 + (i - 1) * 60, 140, 50,
+        self.axes[axis] = UI.Button(self.frame, axis:upper(), 565 + (i - 1) * 60, 140, 50,
             function() settings.axis = axis; self:Refresh() end)
     end
     local body = CreateFrame("Frame", nil, self.frame)
@@ -70,23 +71,29 @@ function CalibrationPanel.New(parent, api, capture, settings, start, notify, tes
         self:Refresh()
         notify(message)
     end)
+    self.resizePanel = MHT.ResizeCalibrationPanel.New(self.frame, api, capture, settings, start, function(message)
+        self:Refresh()
+        notify(message)
+    end, test or function() self:StartTest(MHT.Motion.StandardProfile) end)
     self:Refresh()
     return self
 end
 
 function CalibrationPanel:Busy()
-    return self.controller:Busy() or self.axisPanel.controller:Busy()
+    return self.controller:Busy() or self.axisPanel.controller:Busy() or self.resizePanel.controller:Busy()
 end
 
 function CalibrationPanel:Kind(kind)
     if self:Busy() or self.blocked then return end
     if self:GetDraft() and not self:ReadTrialInputs() then return end
+    if self.settings.kind == "resize" and self.resizePanel.controller.draft and not self.resizePanel:ReadInputs() then return end
     self.settings.kind = kind
     self:Refresh()
     if kind == "axes" then self.notify("Choose an axis. In Advanced mode, select a placed copy and Start, or Start then click it.") end
 end
 
 function CalibrationPanel:Start(profile)
+    if self.settings.kind == "resize" then self.resizePanel:Start(profile); return end
     if self.settings.kind == "axes" then
         local c = self.axisPanel.controller
         local ok, started, reason = pcall(c.Start, c, self.settings.axis, profile)
@@ -108,6 +115,7 @@ function CalibrationPanel:GetDraft()
     local c = self.controller
     if not c then return nil end
     if self.settings.kind == "axes" then return nil end
+    if self.settings.kind == "resize" then return nil end
     if self.settings.kind == "size" then return c.sizeDraft end
     return c.draft and c.draft.axis == self.settings.axis and c.draft or nil
 end
@@ -140,6 +148,7 @@ function CalibrationPanel:LoadSaved()
 end
 
 function CalibrationPanel:StartTest(profile)
+    if self.settings.kind == "resize" then self.resizePanel:Start(profile, true); return end
     if not self:ReadTrialInputs() then return end
     local c, s = self.controller, self.settings
     local start = s.kind == "size" and c.StartSizeTest or c.StartTest
@@ -156,19 +165,22 @@ function CalibrationPanel:SaveTrial()
 end
 
 function CalibrationPanel:Abort(message)
-    if self.axisPanel.controller:Busy() or self.settings.kind == "axes" then self.axisPanel.controller:Abort(message)
+    if self.resizePanel.controller:Busy() or self.settings.kind == "resize" then self.resizePanel.controller:Abort(message)
+    elseif self.axisPanel.controller:Busy() or self.settings.kind == "axes" then self.axisPanel.controller:Abort(message)
     else self.controller:Abort(message) end
 end
 
 function CalibrationPanel:Update(elapsed)
     self.controller:Update(elapsed)
     self.axisPanel.controller:Update(elapsed)
+    self.resizePanel.controller:Update(elapsed)
     if self:Busy() then self:Refresh() end
 end
 
 function CalibrationPanel:OnEvent(event, ...)
     self.controller:OnEvent(event, ...)
     self.axisPanel.controller:OnEvent(event, ...)
+    self.resizePanel.controller:OnEvent(event, ...)
 end
 
 function CalibrationPanel:SetBlocked(blocked)
@@ -183,11 +195,18 @@ function CalibrationPanel:Refresh()
     self.pivot:SetEnabled(not locked and s.kind ~= "pivot")
     self.size:SetEnabled(not locked and s.kind ~= "size")
     self.rotationAxes:SetEnabled(not locked and s.kind ~= "axes")
-    for axis, button in pairs(self.axes) do button:SetEnabled(not locked and s.axis ~= axis) end
+    self.resizePivot:SetEnabled(not locked and s.kind ~= "resize")
+    for axis, button in pairs(self.axes) do
+        button:SetEnabled(not locked and s.axis ~= axis)
+        button:SetShown(s.kind ~= "resize")
+    end
     local axes = s.kind == "axes"
-    self.measurementFrame:SetShown(not axes)
+    self.measurementFrame:SetShown(not axes and s.kind ~= "resize")
     self.axisPanel.frame:SetShown(axes)
+    self.resizePanel.frame:SetShown(s.kind == "resize")
+    if s.kind == "resize" then self.resizePanel:Refresh(self.blocked); return end
     if axes then self.axisPanel:Refresh(self.blocked); return end
+    self.workflow:SetChecked(s.workflow == "aside")
     self.workflow:SetEnabled(not locked)
     self.startButton:SetEnabled(not locked)
     self.stopButton:SetEnabled(busy)
