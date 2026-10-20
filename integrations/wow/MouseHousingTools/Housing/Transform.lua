@@ -155,3 +155,24 @@ function Transform.Translation(from, target, pivot, rotationPivots, rotationAxes
     end
     return shift
 end
+
+-- Predict raw native turns, including the center's movement around each pivot.
+-- Points and pivots start in the calibrated copy's frame, at scale 1.
+function Transform.RotatePoints(points, rotation, rotationPivots, rotationAxes)
+    local applied, center = { x = 0, y = 0, z = 0 }, { x = 0, y = 0, z = 0 }
+    local pose = { rotation = applied, rotationAxes = rotationAxes }
+    for _, axis in ipairs({ "x", "y", "z" }) do
+        local before = Transform.PivotOffset(pose, rotationPivots[axis])
+        applied[axis] = rotation[axis] or 0
+        local after = Transform.PivotOffset(pose, rotationPivots[axis])
+        for _, coordinate in ipairs({ "x", "y", "z" }) do
+            center[coordinate] = center[coordinate] + before[coordinate] - after[coordinate]
+        end
+    end
+    local result = {}
+    for i, point in ipairs(points) do
+        local offset = Transform.PivotOffset(pose, point)
+        result[i] = { x = center.x + offset.x, y = center.y + offset.y, z = center.z + offset.z }
+    end
+    return result, center
+end

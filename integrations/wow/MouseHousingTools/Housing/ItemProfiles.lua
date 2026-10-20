@@ -32,3 +32,23 @@ function ItemProfiles.Pivot(decorID, axis, measurements)
     end
     return pivot
 end
+
+function ItemProfiles.CalibratedDimensions(decorID, measurements)
+    local item = measurements and measurements[decorID]
+    local dimensions = {}
+    for i, axis in ipairs({ "x", "y", "z" }) do
+        local record = item and item.size and item.size[axis]
+        local value = record and record.units and record.units[axis]
+        if type(value) ~= "number" or value ~= value or value <= 0 or value == math.huge then
+            return nil, "Save all three size measurements for this item before building this shape."
+        end
+        dimensions[i] = value
+        if not (item.pivot and item.pivot[axis] and item.pivot[axis].units) then
+            return nil, "Save pivots for all three rotation axes before building this shape."
+        end
+    end
+    if not MHT.RotationAxes.ForItem(decorID, measurements) then
+        return nil, "Save the X, Y and Z answers in Rotation axes before building this shape."
+    end
+    return dimensions
+end
