@@ -60,6 +60,7 @@ function Placement:Start(plan, profile, workflow)
     self.profile = profile
     self.workflow = workflow
     self.isTest = false
+    self.rotateFirst = plan.rotateFirst
 
     self.copiesCreated = 0
     self.copyDelay, self.copyRetries, self.retryDelay = BATCH_COPY_DELAY, 0, nil
@@ -256,6 +257,7 @@ function Placement:HandleSelectedCopy(selected)
             from = self.plan.source,
             decorID = self.source.decorID,
             motionProfile = self.profile,
+            rotateFirst = self.rotateFirst,
         }, guid, done, onPhase)
     end
 end
@@ -299,6 +301,13 @@ function Placement:Update(elapsed)
                 local plan, reason = solid.ForItem(self.plan, hovered.decorID, self.motion.measurements)
                 if not plan then self:Abort(reason); return end
                 self.plan = plan
+                if self.rotateFirst and plan.settings.scale ~= 1 then
+                    local _, saved = MHT.ItemProfiles.ResizePivot(hovered.decorID, self.motion.measurements)
+                    if not saved then
+                        self:Abort("Save a resize pivot for this item before running a resized figure test.")
+                        return
+                    end
+                end
             end
             local stock, reason = self.api:CheckStock(hovered, #self.plan.items)
             if not stock then self:Abort(reason); return end

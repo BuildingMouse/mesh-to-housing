@@ -37,18 +37,18 @@ function Motion:MoveIntoPlace(target, options, guid, done, onPhase)
         end
         rotationAxes = MHT.RotationAxes.ForItem(options.decorID, self.measurements)
     end
-    local item = MHT.Transform.Translation(options.from, target, pivot, rotationPivots, rotationAxes)
+    local item = MHT.Transform.Translation(options.from, target, pivot, rotationPivots, rotationAxes, options.rotateFirst)
     -- Keep the measured copy pose when its size is already correct. Even an
     -- empty Scale phase would otherwise reset engine state before rotation.
     local sourceScale = options.from and options.from.scale or 1
     local targetScale = target.scale or 1
     if targetScale ~= sourceScale then item.scale = targetScale end
     item.rotation = MHT.Transform.RotationDelta(options.from or {}, target, rotationAxes)
-    self:Apply(item, options.motionProfile, guid, done, false, onPhase)
+    self:Apply(item, options.motionProfile, guid, done, false, onPhase, options.rotateFirst)
 end
 
 -- Raw increments for the diagnostic test; no starting pose is available from the API.
-function Motion:Apply(item, profile, guid, done, relative, onPhase)
+function Motion:Apply(item, profile, guid, done, relative, onPhase, rotateFirst)
     profile = profile or Motion.StandardProfile
     local move = {}
     for _, axis in ipairs({ { "x", "right", "Right", "Left" },
@@ -66,9 +66,15 @@ function Motion:Apply(item, profile, guid, done, relative, onPhase)
         resize[1] = { name = growing and "ScaleUp" or "ScaleDown",
                       duration = math.abs(item.scale - 1) / profile[growing and "grow" or "shrink"] }
     end
-    local phases = { { mode = "Translate", label = "Moving", controls = move } }
+    local translation = { mode = "Translate", label = "Moving", controls = move }
+    local resizing
     if item.scale then
-        phases[#phases + 1] = { mode = "Scale", label = "Resizing", reset = not relative, controls = resize }
+        resizing = { mode = "Scale", label = "Resizing", reset = not relative and not rotateFirst, controls = resize }
+    end
+    local phases = {}
+    if not rotateFirst then
+        phases[#phases + 1] = translation
+        if resizing then phases[#phases + 1] = resizing end
     end
     local rotation = item.rotation or { x = 0, y = 0, z = (math.deg(item.yaw or 0) + 180) % 360 - 180 }
     if (rotation.x or 0) ~= 0 or (rotation.y or 0) ~= 0 or (rotation.z or 0) ~= 0 then
@@ -89,6 +95,10 @@ function Motion:Apply(item, profile, guid, done, relative, onPhase)
                 previous = i
             end
         end
+    end
+    if rotateFirst then
+        if resizing then phases[#phases + 1] = resizing end
+        phases[#phases + 1] = translation
     end
     self:Begin(phases, guid, done, onPhase)
 end

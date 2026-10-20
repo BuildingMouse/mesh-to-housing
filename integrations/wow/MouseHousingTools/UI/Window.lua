@@ -115,8 +115,9 @@ function Window.New(settings, uiState)
         function() self:TestCase("resize") end)
     self.testContent = CreateFrame("Frame", nil, self.testsFrame)
     self.testContent:SetAllPoints(self.testsFrame)
+    uiState.figureTests = uiState.figureTests or {}
     self.figures = MHT.TestFiguresPanel.New(self.testsFrame,
-        function() self:StartFigureTest() end, function() self:EndPlacement() end)
+        function() self:StartFigureTest() end, function() self:EndPlacement() end, uiState.figureTests)
     uiState.transformTest = uiState.transformTest or {}
     self.testSettings = uiState.transformTest
     -- Replace the old unmeasured 90 deg/sec default once; retain custom speeds.
@@ -342,8 +343,10 @@ end
 
 function Window:StartFigureTest()
     if self:Busy() or not self:ValidRotationSettings() then return end
+    local plan, errorMessage = self.figures:Prepare()
+    if not plan then self:SetStatus(errorMessage); return end
     local ok, started, reason = pcall(self.placement.Start, self.placement,
-        self.figures.plan, self:MotionProfile(), self.settings.placementWorkflow)
+        plan, self:MotionProfile(), self.settings.placementWorkflow)
     if not ok then self.placement:Abort(tostring(started))
     elseif not started then self:SetStatus(reason) end
 end

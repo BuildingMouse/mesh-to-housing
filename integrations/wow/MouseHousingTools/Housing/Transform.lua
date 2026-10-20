@@ -114,14 +114,20 @@ function Transform.RotationDelta(from, target, rotationAxes)
         z = degrees(rz) * (signs and signs.z or 1) }
 end
 
--- Poses describe visual centers; the game moves the pivot. Precompensate so
--- resizing and rotating after translation leave the center at the target.
-function Transform.Translation(from, target, pivot, rotationPivots, rotationAxes)
+-- Compensate for center drift around each pivot, in the order Motion applies it.
+function Transform.Translation(from, target, pivot, rotationPivots, rotationAxes, rotateFirst)
     from = from or {}
     pivot = pivot or { x = 0, y = 0, z = 0 }
-    local startOffset = Transform.PivotOffset(from, pivot)
-    local scaled = { scale = target.scale or 1, rotation = Transform.Rotation(from), rotationSpace = from.rotationSpace }
-    local scaledOffset = Transform.PivotOffset(scaled, pivot)
+    local resizePose = rotateFirst and target or from
+    local function resizeOffset(scale)
+        return Transform.PivotOffset({ scale = scale, rotation = Transform.Rotation(resizePose),
+            rotationSpace = resizePose.rotationSpace }, pivot)
+    end
+    local startOffset = resizeOffset(from.scale or 1)
+    local scaledOffset = resizeOffset(target.scale or 1)
+    -- With rotation first, use the original size for all rotation pivots.
+    local rotationPose = { scale = rotateFirst and (from.scale or 1) or (target.scale or 1),
+        rotation = Transform.Rotation(from), rotationSpace = from.rotationSpace }
     local shift = {}
     for _, coordinate in ipairs({ "x", "y", "z" }) do
         shift[coordinate] = (target[coordinate] or 0) - (from[coordinate] or 0)
@@ -132,13 +138,13 @@ function Transform.Translation(from, target, pivot, rotationPivots, rotationAxes
     -- Follow the same X/Y/Z sequence as Motion, compensating each pivot separately.
     for _, axis in ipairs({ "x", "y", "z" }) do
         local localPivot = rotationPivots and rotationPivots[axis] or pivot
-        local offset = rotationAxes and localPivot or Transform.PivotOffset(scaled, localPivot)
+        local offset = rotationAxes and localPivot or Transform.PivotOffset(rotationPose, localPivot)
         local function currentOffset()
-            local value = Transform.PivotOffset({ scale = rotationAxes and scaled.scale or 1,
+            local value = Transform.PivotOffset({ scale = rotationAxes and rotationPose.scale or 1,
                 rotation = applied, rotationSpace = target.rotationSpace, rotationAxes = rotationAxes }, offset)
             if rotationAxes then
                 -- The entire moving frame starts in the source orientation.
-                value = Transform.PivotOffset({ rotation = scaled.rotation, rotationSpace = scaled.rotationSpace }, value)
+                value = Transform.PivotOffset({ rotation = rotationPose.rotation, rotationSpace = rotationPose.rotationSpace }, value)
             end
             return value
         end
