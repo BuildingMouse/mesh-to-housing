@@ -35,7 +35,11 @@ function EditorControls.New(window)
     self.frame:SetClampedToScreen(true)
     self.frame:SetToplevel(true)
 
-    UI.Text(self.frame, "MouseHousingTools", 12, 12, 250, "GameFontNormal")
+    UI.Text(self.frame, "MouseHousingTools", 12, 12, 220, "GameFontNormal")
+    self.close = UI.Button(self.frame, "X", 244, 7, 22, function()
+        self.hidden = true
+        self.frame:Hide()
+    end)
 
     self.start = UI.Button(self.frame, "Ctrl+S  Start", 12, 37, 121, function()
         if editorIsActive() then window:StartPlacement() end
@@ -122,7 +126,7 @@ function EditorControls:ApplyState(active)
     if active then
         self:SetHousingParent(housingParent())
 
-        if not self.frame:IsShown() then self.frame:Show() end
+        self.frame:SetShown(not self.hidden)
 
         if not self.bindingsInstalled then self:InstallBindings() end
     else
@@ -131,6 +135,11 @@ function EditorControls:ApplyState(active)
 
         self:SetHousingParent(UIParent)
     end
+end
+
+function EditorControls:Show()
+    self.hidden = false
+    self:Sync()
 end
 
 function EditorControls:Sync(leavingWorld)

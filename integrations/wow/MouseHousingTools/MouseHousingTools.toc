@@ -30,4 +30,5 @@ UI\TestFigures.lua
 UI\ResizeTest.lua
 UI\Window.lua
 UI\EditorControls.lua
+UI\HousingTooltips.lua
 Init.lua
