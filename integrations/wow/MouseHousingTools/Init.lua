@@ -27,6 +27,7 @@ local function initialize()
 
     db.ui = db.ui or {}
 
+    MHT.HideHousingHandleTooltips()
     MHT.window = MHT.Window.New(db.settings, db.ui)
     MHT.editorControls = MHT.EditorControls.New(MHT.window)
 
@@ -40,10 +41,12 @@ local function initialize()
         elseif command == "stop" or command == "end" or command == "abort" then
             MHT.window:EndPlacement()
         elseif command == "show" or command == "settings" then
+            MHT.editorControls:Show()
             if not MHT.window.frame:IsShown() then MHT.window:Toggle() end
         elseif command == "hide" then
             MHT.window.frame:Hide()
         else
+            MHT.editorControls:Show()
             MHT.window:Toggle()
         end
 
