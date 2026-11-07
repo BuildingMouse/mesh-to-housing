@@ -1,8 +1,21 @@
 from .pipeline.processor import MeshProcessor, SparseResult
-from .fitting.shapes import Shape
-from .fitting.result import FittingResult
-from .fitting.fitter import ShapeFitter
+from .algorithms import FittingAlgorithm, RandomPlacementGreedy
+from .construction import Construction
+from .constraints import TransformConstraints
+from .fit import fit
+from .fitting_task import FittingTask
+from .geometry.config import GeometryConfig
+from .items import Cuboid, Item, MeshItem, load_catalog
+from .losses import ConstructionLoss, LossConfig, LossTerm, OutsideVolumeLoss, UncoveredVolumeLoss
+from .losses import outside_volume, uncovered_volume
 from .meshes.loading import MeshLoader
-from .meshes.preparation import prepare_mesh
+from .meshes.preparation import prepare_mesh, resize_mesh
+from .placement import Placement
 
-__all__ = ["MeshProcessor", "SparseResult", "Shape", "FittingResult", "ShapeFitter", "MeshLoader", "prepare_mesh"]
+__all__ = [
+    "Construction", "ConstructionLoss", "Cuboid", "FittingAlgorithm", "FittingTask", "GeometryConfig",
+    "Item", "MeshItem", "MeshLoader", "MeshProcessor", "Placement", "RandomPlacementGreedy",
+    "LossConfig", "LossTerm", "OutsideVolumeLoss", "SparseResult", "TransformConstraints",
+    "UncoveredVolumeLoss", "fit",
+    "load_catalog", "outside_volume", "prepare_mesh", "resize_mesh", "uncovered_volume",
+]
