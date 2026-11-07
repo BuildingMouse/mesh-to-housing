@@ -3,9 +3,11 @@ from numbers import Integral
 
 import numpy as np
 
+from ..items.cuboid import Cuboid
+
 
 @dataclass
-class VoxelVolume:
+class VoxelGrid:
     """Occupied cells on a fixed grid; origin is the center of cell (0, 0, 0)."""
 
     indices: np.ndarray
@@ -20,10 +22,11 @@ class VoxelVolume:
         self.cells = frozenset(map(tuple, self.indices))
 
     @classmethod
-    def from_mesh(cls, mesh, *, pitch, closing=0):
+    def from_mesh(cls, mesh, *, pitch=None, closing=0):
         """Voxelize the surface and fill enclosed cells; closing seals small gaps."""
         from scipy.ndimage import binary_closing, binary_fill_holes
 
+        pitch = float(mesh.extents.max() / 96 if pitch is None else pitch)
         if not np.isfinite(pitch) or pitch <= 0:
             raise ValueError("pitch must be finite and positive")
         if isinstance(closing, bool) or not isinstance(closing, Integral) or closing < 0:
@@ -43,21 +46,27 @@ class VoxelVolume:
     def points(self):
         return self.origin + self.indices * self.pitch
 
-    def placed_cells(self, shape, center, rotation, scale):
-        """Sample the item's solid at grid centers, including outside target bounds."""
-        if shape.box_extents is None:
-            raise NotImplementedError("Volume queries currently support only Shape.box()")
-        bounds = shape.mesh.bounds
-        corners = np.array(np.meshgrid(*bounds.T, indexing="ij")).reshape(3, -1).T
-        corners = (corners @ rotation.T) * scale + center
-        low = np.ceil((corners.min(axis=0) - self.origin) / self.pitch - 1e-9).astype(int)
-        high = np.floor((corners.max(axis=0) - self.origin) / self.pitch + 1e-9).astype(int)
-        lengths = high - low + 1
-        if np.any(lengths <= 0):
-            return frozenset()
-        if np.prod(lengths.astype(float)) > 2_000_000:
-            raise ValueError("Item grid is too large; increase pitch")
-        indices = np.indices(tuple(lengths)).reshape(3, -1).T + low
-        local = ((self.origin + indices * self.pitch - center) @ rotation) / scale
-        inside = np.all(np.abs(local) <= np.asarray(shape.box_extents) / 2 + self.pitch * 1e-9, axis=1)
-        return frozenset(map(tuple, indices[inside]))
+
+def occupied_cells(grid, placement):
+    """Sample an item's solid on the target grid, also outside target bounds."""
+    item = placement.item
+    bounds = (np.array([-item.extents / 2, item.extents / 2])
+              if isinstance(item, Cuboid) else item.mesh.bounds)
+    corners = np.array(np.meshgrid(*bounds.T, indexing="ij")).reshape(3, -1).T
+    corners = corners @ placement.rotation.T * placement.scale + placement.center
+    low = np.ceil((corners.min(axis=0) - grid.origin) / grid.pitch - 1e-9).astype(int)
+    high = np.floor((corners.max(axis=0) - grid.origin) / grid.pitch + 1e-9).astype(int)
+    lengths = high - low + 1
+    if np.any(lengths <= 0):
+        return frozenset()
+    if np.prod(lengths.astype(float)) > 2_000_000:
+        raise ValueError("Item grid is too large; increase pitch")
+    indices = np.indices(tuple(lengths)).reshape(3, -1).T + low
+    local = ((grid.origin + indices * grid.pitch - placement.center) @ placement.rotation) / placement.scale
+    if isinstance(item, Cuboid):
+        inside = np.all(np.abs(local) <= item.extents / 2 + grid.pitch * 1e-9, axis=1)
+    else:
+        if not item.mesh.is_watertight:
+            raise ValueError(f"Item {item.key!r} needs a watertight mesh for volume queries")
+        inside = item.mesh.contains(local)
+    return frozenset(map(tuple, indices[inside]))

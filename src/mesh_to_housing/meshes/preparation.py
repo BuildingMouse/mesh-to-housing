@@ -20,3 +20,17 @@ def prepare_mesh(mesh) -> trimesh.Trimesh:
         raise ValueError("mesh must contain nondegenerate triangles")
     prepared.remove_unreferenced_vertices()
     return prepared
+
+
+def resize_mesh(mesh, size, *, axis=None):
+    """Uniformly resize a copy to the requested longest side or selected axis."""
+    if not np.isfinite(size) or size <= 0:
+        raise ValueError("size must be finite and positive")
+    if axis is not None and axis not in (0, 1, 2):
+        raise ValueError("axis must be 0, 1, 2, or None")
+    resized = prepare_mesh(mesh)
+    extent = float(resized.extents.max() if axis is None else resized.extents[axis])
+    if extent <= 0:
+        raise ValueError("Selected mesh extent must be positive")
+    resized.apply_scale(size / extent)
+    return resized
