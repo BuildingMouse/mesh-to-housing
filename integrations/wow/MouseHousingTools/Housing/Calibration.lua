@@ -2,19 +2,10 @@ local _, MHT = ...
 local Calibration = {}
 Calibration.__index = Calibration
 MHT.Calibration = Calibration
+local copy = MHT.Util.Copy
+local finite = MHT.Util.Finite
 
 local axes = { x = "right", y = "forward", z = "up" }
-
-local function copy(value)
-    if type(value) ~= "table" then return value end
-    local result = {}
-    for key, entry in pairs(value) do result[key] = copy(entry) end
-    return result
-end
-
-local function finite(value)
-    return type(value) == "number" and value == value and math.abs(value) < math.huge
-end
 
 local function editedMeasurement(measurement, units)
     local result = copy(measurement)
