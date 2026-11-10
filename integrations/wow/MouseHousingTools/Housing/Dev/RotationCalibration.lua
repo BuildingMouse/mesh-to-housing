@@ -21,7 +21,7 @@ function Calibration:Load(source)
     if not source or not source.decorID then return nil, "Select or hover the item first." end
     local item = self.measurements[source.decorID]
     self.draft = { decorID = source.decorID, name = source.name or item and item.name,
-        axes = MHT.RotationAxes.Copy(item and item.rotationAxes) }
+        axes = MHT.Util.Copy(item and item.rotationAxes or {}) }
     return true
 end
 
@@ -102,7 +102,7 @@ function Calibration:Save()
     local item = self.measurements[self.draft.decorID] or {}
     self.measurements[self.draft.decorID] = item
     item.name = self.draft.name or item.name
-    item.rotationAxes = MHT.RotationAxes.Copy(self.draft.axes)
+    item.rotationAxes = MHT.Util.Copy(self.draft.axes)
     self:SetState("review", "Rotation axes saved for this item. Shape placement now uses these answers.")
     return true
 end

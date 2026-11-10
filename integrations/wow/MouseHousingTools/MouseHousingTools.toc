@@ -15,6 +15,7 @@ Housing\RotationAxes.lua
 Housing\Transform.lua
 Housing\Motion.lua
 Housing\Placement.lua
+Housing\Dev\RotationAxes.lua
 Housing\Dev\RotationCalibration.lua
 Housing\Dev\CornerTest.lua
 Housing\Dev\MovementCapture.lua
