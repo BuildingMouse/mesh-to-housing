@@ -252,11 +252,11 @@ end
 
 function Calibration:BeginCopy()
     self:SetState("copy", "Creating calibration copy " .. (self.created + 1) .. " / 2. Keep the mouse still.")
-    self.api:BeginCopy(self.source, 2 - self.created, self.copyVariants[self.created + 1])
+    self.api:BeginColorCopy(self.source, 2 - self.created, self.copyVariants[self.created + 1])
 end
 
 function Calibration:ValidCopy(selected)
-    if not selected or selected.isLocked or not selected.decorGUID then return false end
+    if not selected or not selected.decorGUID then return false end
     if selected.decorGUID == self.source.decorGUID or selected.decorID ~= self.source.decorID then return false end
     if #self.copies == self.created then
         for _, guid in ipairs(self.copies) do if guid == selected.decorGUID then return true end end
@@ -318,7 +318,7 @@ function Calibration:Update(elapsed)
     if self.state == "arming" or self.state == "returnsource" then
         local hovered = self.api:Hovered()
         local x, y = GetCursorPosition()
-        local valid = hovered and not hovered.isLocked and hovered.decorGUID
+        local valid = hovered and hovered.decorGUID
         if self.automatic then valid = valid and hovered.decorID == self.trial.decorID end
         if self.state == "returnsource" then
             valid = valid and hovered.decorGUID == self.source.decorGUID

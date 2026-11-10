@@ -83,12 +83,11 @@ function Rhombicosidodecahedron.Build(scale, dimensions)
     local items = {}
     for _, face in ipairs(squareFaces()) do
         local center, normal = face.center, face.normal
-        items[#items + 1] = {
-            x = center.x * edge / 2 - normal.x * thickness / 2,
-            y = center.y * edge / 2 - normal.y * thickness / 2,
-            z = centerZ + center.z * edge / 2 - normal.z * thickness / 2,
-            scale = scale, rotation = MHT.Rotation.FromAxes(face.u, face.v, normal),
-        }
+        items[#items + 1] = MHT.Plan.Placement(center.x * edge / 2 - normal.x * thickness / 2,
+            center.y * edge / 2 - normal.y * thickness / 2, centerZ + center.z * edge / 2 - normal.z * thickness / 2,
+            MHT.Rotation.FromAxes(face.u, face.v, normal), scale)
     end
-    return { solid = "rhombicosidodecahedron", scale = scale, items = items, dimensions = { side, depth, height } }
+    local plan = MHT.Plan.New(items, { side, depth, height })
+    plan.fit = function(itemDimensions) return Rhombicosidodecahedron.Build(scale, itemDimensions) end
+    return plan
 end

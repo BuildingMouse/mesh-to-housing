@@ -80,7 +80,7 @@ function CapturePanel:Start(coordinate)
         return nil, "Open Advanced mode first."
     end
     local selected = self.api:Selected()
-    if not selected or selected.isLocked then return nil, "Select an unlocked item first." end
+    if not selected then return nil, "Select an item first." end
     local bindings, count = self.api:MovementBindings(), 0
     self.allowed = {}
     for _, axis in ipairs(MHT.MovementCapture.Axes) do

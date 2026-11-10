@@ -2,11 +2,12 @@ local _, MHT = ...
 local Layout = {}
 MHT.Layout = Layout
 local Rotation = MHT.Rotation
+local Plan = MHT.Plan
 
--- Plans are item positions, turns and sizes relative to the source item.
+-- Shape settings, and turning them into a plan (Geometry/Plan.lua).
 -- Nothing here depends on the game movement/rotation mechanics.
 
-Layout.Solids = { cube = MHT.Cube, tilted_circle = MHT.TiltedCircle }
+Layout.Solids = {}
 
 Layout.defaults = {
     shape = "stairs", count = 12, scale = 1,
@@ -34,56 +35,27 @@ function Layout.Validate(settings)
     return true
 end
 
-function Layout.Corners(item, dimensions)
-    local corners = {}
-    for _, z in ipairs({ -1, 1 }) do
-        for _, xy in ipairs({ { -1, -1 }, { 1, -1 }, { 1, 1 }, { -1, 1 } }) do
-            local offset = Rotation.Apply(item.rotation, { x = xy[1] * dimensions[1] * item.scale / 2,
-                y = xy[2] * dimensions[2] * item.scale / 2, z = z * dimensions[3] * item.scale / 2 })
-            corners[#corners + 1] = { item.x + offset.x, item.y + offset.y, item.z + offset.z }
-        end
-    end
-    return corners
+-- How far a placed item's box reaches from its center along a world axis
+-- (1 = X, 2 = Y, 3 = Z), given the box's dimensions at 100% size.
+local function reach(item, dimensions, axis)
+    local r, total = item.rotation, 0
+    for j = 1, 3 do total = total + math.abs(r[axis][j]) * dimensions[j] end
+    return item.scale * total / 2
 end
 
 function Layout.Build(settings)
     local valid, reason = Layout.Validate(settings)
     if not valid then return nil, reason end
-    local items = {}
-    local totalAngle = settings.turns * 2 * math.pi
-    local run = settings.spacing
-    if settings.shape == "stairs" and totalAngle ~= 0 then
-        run = settings.radius * math.abs(totalAngle) / (settings.count - 1)
-    end
-    for i = 0, settings.count - 1 do
-        local item = { x = 0, y = i * run, z = i * run * math.tan(math.rad(settings.slope)), scale = settings.scale }
-        local heading = 0
-        if settings.shape == "circle" then
-            local angle = i * 2 * math.pi / settings.count
-            item.x = settings.radius * math.sin(angle)
-            item.y = settings.radius * (1 - math.cos(angle))
-            item.z, heading = 0, angle
-        elseif totalAngle ~= 0 then
-            local angle = i * totalAngle / (settings.count - 1)
-            local direction = totalAngle > 0 and 1 or -1
-            item.x = direction * settings.radius * (1 - math.cos(angle))
-            item.y = settings.radius * math.sin(math.abs(angle))
-            heading = -angle
-        end
-        item.rotation = Rotation.About("z", heading + math.rad(settings.rotation))
-        items[#items + 1] = item
-    end
+    local items = (settings.shape == "stairs" and MHT.Stairs or MHT.Circle).Placements(settings)
+    -- Keep the whole shape in front of the source item.
     local dimensions = { settings.width, settings.depth, settings.thickness }
     local front = math.huge
     for _, item in ipairs(items) do
-        for _, point in ipairs(Layout.Corners(item, dimensions)) do
-            front = math.min(front, point[2])
-        end
+        front = math.min(front, item.y - reach(item, dimensions, 2))
     end
-    local offset = settings.clearance + settings.depth / 2 - front
+    local offset = settings.clearance + dimensions[2] / 2 - front
     for _, item in ipairs(items) do item.y = item.y + offset end
-    return {
-        items = items, dimensions = dimensions, spacing = run,
-        source = { x = 0, y = 0, z = 0, scale = 1, rotation = Rotation.Identity() },
-    }
+    local plan = Plan.New(items, dimensions)
+    plan.source = Plan.Placement(0, 0, 0, Rotation.Identity(), 1)
+    return plan
 end

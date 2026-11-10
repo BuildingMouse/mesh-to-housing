@@ -42,8 +42,8 @@ function Calibration:Start(axis, profile)
         return nil, "Open Advanced mode first."
     end
     local selected = self.api:Selected()
-    if selected and (selected.isLocked or not selected.decorGUID or not selected.decorID) then
-        return nil, "Choose an editable, placed copy."
+    if selected and (not selected.decorGUID or not selected.decorID) then
+        return nil, "Choose a placed copy."
     end
     self.axis, self.profile, self.guid = axis, profile, nil
     self:SetState("armed", "Click a flat, placed copy in your usual starting pose. The test adds +90° on " .. axis:upper() .. "; no rotation reset.")
@@ -52,8 +52,8 @@ function Calibration:Start(axis, profile)
 end
 
 function Calibration:Begin(selected)
-    if selected.isLocked or not selected.decorGUID or not selected.decorID then
-        self:Abort("Choose an editable, placed copy."); return
+    if not selected.decorGUID or not selected.decorID then
+        self:Abort("Choose a placed copy."); return
     end
     self.source, self.guid = selected, selected.decorGUID
     if not self.draft or self.draft.decorID ~= selected.decorID then self:Load(selected) end

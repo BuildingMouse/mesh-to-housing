@@ -64,10 +64,10 @@ function Test:Reject(selected, message)
 end
 
 function Test:BeginTile(selected)
-    if selected.isLocked or not selected.decorID or not selected.decorGUID then
-        self:Reject(selected, "Choose an editable tile with saved dimensions, pivots and axis answers."); return
+    if not selected.decorID or not selected.decorGUID then
+        self:Reject(selected, "Choose a placed tile."); return
     end
-    local dimensions, reason = MHT.ItemProfiles.CalibratedDimensions(selected.decorID, self.measurements)
+    local dimensions, reason = MHT.ItemProfiles.Dimensions(selected.decorID, self.measurements)
     if not dimensions then self:Reject(selected, reason); return end
     local item = MHT.ItemProfiles.Calibration(selected.decorID, self.measurements)
     local points = {}
@@ -101,7 +101,7 @@ end
 
 function Test:BeginMarker(selected)
     local corner = Test.Corners[self.completed + 1]
-    if selected.isLocked or not selected.decorGUID or selected.decorGUID == self.tileGUID or self.finished[selected.decorGUID] then
+    if not selected.decorGUID or selected.decorGUID == self.tileGUID or self.finished[selected.decorGUID] then
         self:Reject(selected, "Click the " .. corner.name .. " marker, not the tile or a finished marker."); return
     end
     self.activeGUID = selected.decorGUID

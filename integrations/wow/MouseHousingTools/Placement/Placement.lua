@@ -17,6 +17,29 @@ end
 
 Placement.DEFAULT_WORKFLOW = "batch"
 
+local shapeJob = { movingLabel = " selected copy..." }
+
+function shapeJob.Reject(placement, selected)
+    local guid = selected.decorGUID
+    if guid == placement.source.decorGUID then return "That is the source. Click a copy instead." end
+    if selected.decorID and selected.decorID ~= placement.source.decorID then
+        return "That is a different decor item. Click a copy."
+    end
+    if placement.finished[guid] then return "That copy is finished. Click another copy." end
+    if placement.workflow == "repeat" and placement.createdGUID and guid ~= placement.createdGUID then
+        return "Click the copy just created for this target."
+    end
+end
+
+function shapeJob.Move(placement, target, guid, done, onPhase)
+    local item = MHT.ItemProfiles.Calibration(placement.source.decorID, placement.measurements)
+    placement.motion:MoveTo(target, item, placement.profile, guid, done, onPhase)
+end
+
+function shapeJob.Done(placement)
+    return "Done. All " .. placement.completed .. " copies were moved and rotated; source item kept."
+end
+
 function Placement.New(api, notify, measurements)
     return setmetatable({
         api = api,
@@ -51,6 +74,9 @@ function Placement:Start(plan, profile, workflow)
     if self.api:IsSelected() then
         return nil, "Finish editing the selected item first."
     end
+    if not MHT.Plan.SingleItem(plan) then
+        return nil, "This plan uses more than one item; building supports one item for now."
+    end
 
     workflow = workflow or Placement.DEFAULT_WORKFLOW
     if workflow ~= "repeat" and workflow ~= "batch" then
@@ -60,7 +86,7 @@ function Placement:Start(plan, profile, workflow)
     self.plan = plan
     self.profile = profile
     self.workflow = workflow
-    self.isTest = false
+    self.job = shapeJob
 
     self.copiesCreated = 0
     self.copyDelay, self.copyRetries, self.retryDelay = BATCH_COPY_DELAY, 0, nil
@@ -91,23 +117,15 @@ function Placement:Start(plan, profile, workflow)
     return true
 end
 
-function Placement:StartTest(item, profile)
+function Placement:StartSelecting(plan, profile, job, message)
     if self:Busy() then return end
-    if not self.api:Active() or self.api:Mode() ~= Enum.HouseEditorMode.ExpertDecor then
-        return nil, "Open Advanced mode first."
-    end
-    if self.api:IsSelected() then
-        return nil, "Deselect the item, press Start, then click it to test."
-    end
-    self.plan = { items = { item } }
-    self.profile = profile
-    self.isTest = true
+    self.plan, self.profile, self.job, self.workflow = plan, profile, job, nil
     self.completed = 0
     self.finished = {}
     self.saved, self.source, self.cursor = nil, nil, nil
     self.activeGUID, self.activeIndex = nil, nil
     self.lastRejectedGUID = nil
-    self:SetState("testselect", "Test armed. Click one item in Advanced mode.")
+    self:SetState("select", message)
     return true
 end
 
@@ -207,18 +225,7 @@ function Placement:HandleSelectedCopy(selected)
     local guid = selected.decorGUID
     if not guid then return end
 
-    local reason
-    if self.isTest and selected.isLocked then
-        reason = "That item is locked. Click an unlocked item."
-    elseif not self.isTest and guid == self.source.decorGUID then
-        reason = "That is the source. Click a copy instead."
-    elseif not self.isTest and selected.decorID and selected.decorID ~= self.source.decorID then
-        reason = "That is a different decor item. Click a copy."
-    elseif self.finished[guid] then
-        reason = "That copy is finished. Click another copy."
-    elseif not self.isTest and self.workflow == "repeat" and self.createdGUID and guid ~= self.createdGUID then
-        reason = "Click the copy just created for this target."
-    end
+    local reason = self.job.Reject(self, selected)
     if reason then
         if self.lastRejectedGUID ~= guid then
             self.lastRejectedGUID = guid
@@ -247,15 +254,9 @@ function Placement:HandleSelectedCopy(selected)
         self.api:Commit()
     end
     local function onPhase(label)
-        self:SetState("moving", label .. (self.isTest and " (test)..." or " selected copy...")
-            .. (target.label and (" " .. target.label) or ""))
+        self:SetState("moving", label .. self.job.movingLabel .. (target.label and (" " .. target.label) or ""))
     end
-    if self.isTest then
-        self.motion:Apply(target, self.profile, guid, done, onPhase)
-    else
-        local item = MHT.ItemProfiles.Calibration(self.source.decorID, self.measurements)
-        self.motion:MoveTo(target, item, self.profile, guid, done, onPhase)
-    end
+    self.job.Move(self, target, guid, done, onPhase)
 end
 
 function Placement:Update(elapsed)
@@ -272,7 +273,7 @@ function Placement:Update(elapsed)
         local hovered = self.api:Hovered()
         local x, y = GetCursorPosition()
 
-        if not hovered or hovered.isLocked or not hovered.decorGUID
+        if not hovered or not hovered.decorGUID
             or (self.state == "source" and hovered.decorGUID ~= self.source.decorGUID) then
             self.hoverGUID = nil
             self.still = 0
@@ -292,12 +293,12 @@ function Placement:Update(elapsed)
         if self.still < 1.2 then return end
 
         if self.state == "arming" then
-            if self.plan.solid then
-                -- Figures are rebuilt for the real item, which must be calibrated.
-                local dimensions, reason = MHT.ItemProfiles.CalibratedDimensions(hovered.decorID, self.measurements)
+            if self.plan.fit then
+                -- Fitted plans are rebuilt for the real item's size.
+                local dimensions, reason = MHT.ItemProfiles.Dimensions(hovered.decorID, self.measurements)
                 if not dimensions then self:Abort(reason); return end
                 local plan
-                plan, reason = MHT.Layout.Solids[self.plan.solid].Build(self.plan.scale, dimensions)
+                plan, reason = self.plan.fit(dimensions)
                 if not plan then self:Abort(reason); return end
                 self.plan = plan
             end
@@ -369,7 +370,7 @@ function Placement:Update(elapsed)
             )
         end
 
-    elseif self.state == "select" or self.state == "testselect" then
+    elseif self.state == "select" then
         if self.api:Mode() ~= Enum.HouseEditorMode.ExpertDecor then
             self:Abort("Editor mode changed; placement stopped.")
             return
@@ -389,7 +390,7 @@ function Placement:Update(elapsed)
         self.motion:Update(elapsed)
     end
 
-    if self.state ~= "select" and self.state ~= "testselect" and self.state ~= "source" and self.state ~= "moving" and self.age > 10 then
+    if self.state ~= "select" and self.state ~= "source" and self.state ~= "moving" and self.age > 10 then
         self:Abort("The game did not confirm the last action. Placement stopped.")
     end
 end
@@ -465,10 +466,7 @@ function Placement:OnEvent(event, ...)
         self.activeIndex = nil
 
         if self.completed == #self.plan.items then
-            self:Abort(
-                self.isTest and "Test finished. Movement and rotation saved."
-                    or "Done. All " .. self.completed .. " copies were moved and rotated; source item kept."
-            )
+            self:Abort(self.job.Done(self))
         elseif self.workflow == "repeat" then
             self:ReturnToSource()
         else

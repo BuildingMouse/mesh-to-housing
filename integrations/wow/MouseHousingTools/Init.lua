@@ -27,7 +27,7 @@ local function initialize()
 
     db.ui = db.ui or {}
 
-    MHT.HideHousingHandleTooltips()
+    MHT.HousingTooltips.HideHandles()
     MHT.window = MHT.Window.New(db.settings, db.ui)
     MHT.editorControls = MHT.EditorControls.New(MHT.window)
 

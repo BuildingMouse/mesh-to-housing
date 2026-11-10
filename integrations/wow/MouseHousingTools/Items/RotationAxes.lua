@@ -22,5 +22,6 @@ end
 function RotationAxes.ForItem(decorID, measurements)
     local item = measurements and measurements[decorID]
     local axes = item and item.rotationAxes
+    if not RotationAxes.Validate(axes) then axes = MHT.ItemProfiles.Logged(decorID).rotationAxes end
     if RotationAxes.Validate(axes) then return MHT.Util.Copy(axes) end
 end

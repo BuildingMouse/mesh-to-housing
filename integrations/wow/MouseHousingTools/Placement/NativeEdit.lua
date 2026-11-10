@@ -5,7 +5,7 @@ local Rotation = MHT.Rotation
 
 -- Turns a plan item into editor moves for a fresh copy of the source.
 -- Rings and resizing turn around item pivots, not the center, so the move
--- also cancels the shift they cause.
+-- also cancels the shift if they cause it.
 
 local RINGS = { "x", "y", "z" }
 
