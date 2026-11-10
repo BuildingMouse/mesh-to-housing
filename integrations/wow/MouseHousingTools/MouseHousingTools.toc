@@ -5,14 +5,15 @@
 ## SavedVariables: MouseHousingToolsDB
 
 Util.lua
+Geometry\Rotation.lua
 Shapes\Cube.lua
-Shapes\Rhombicosidodecahedron.lua
 Shapes\TiltedCircle.lua
 Shapes\Layout.lua
+Shapes\Dev\Rhombicosidodecahedron.lua
 Housing\API.lua
 Housing\ItemProfiles.lua
 Housing\RotationAxes.lua
-Housing\Transform.lua
+Housing\NativeEdit.lua
 Housing\Motion.lua
 Housing\Placement.lua
 Housing\Dev\RotationAxes.lua

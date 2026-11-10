@@ -37,9 +37,10 @@ function Panel:Preview()
     if type(percent) == "number" and percent >= 20 and percent <= 200 then
         local scale, height = percent / 100, 0.25
         local lift = height * math.max(1, scale)
+        local identity = MHT.Rotation.Identity()
         plan = { dimensions = { 2, 2, height }, items = {
-            { x = 0, y = 0, z = lift, yaw = 0, scale = scale },
-            { x = 2 * scale, y = 2 * scale, z = lift + height * scale, yaw = 0, scale = scale },
+            { x = 0, y = 0, z = lift, rotation = identity, scale = scale },
+            { x = 2 * scale, y = 2 * scale, z = lift + height * scale, rotation = identity, scale = scale },
         } }
     end
     self.preview:SetPlan(plan, "resize_test")

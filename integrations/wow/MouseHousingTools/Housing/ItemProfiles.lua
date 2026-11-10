@@ -3,31 +3,20 @@ local ItemProfiles = {}
 MHT.ItemProfiles = ItemProfiles
 local finite = MHT.Util.Finite
 
--- Pivot from the visual center, in movement units at scale 1.
--- +X is right, +Y is forward, +Z is up in the item's default orientation.
+-- Rotation and resizing don't always turn an item around its center: the
+-- pivot is the point they turn around, so placement can undo the shift.
+-- Values measured by hand in game, so they're estimates.
+-- Calibration saved in game replaces them.
 ItemProfiles.ByDecorID = {
     [23553] = { -- Small Wooden Floor Tile
-        -- X estimated from opposite-tile alignment; Y still needs a depth measurement.
         pivot = { x = 0.8, y = 4 / 3, z = 0 },
     },
 }
 
-function ItemProfiles.Pivot(decorID, axis, measurements)
+local function loggedPivot(decorID)
     local profile = ItemProfiles.ByDecorID[decorID]
-    local preset = profile and profile.pivot or {}
-    local axisPreset = profile and profile.rotationPivots and profile.rotationPivots[axis] or {}
-    local item = measurements and measurements[decorID]
-    local measured = item and item.pivot and item.pivot[axis]
-    local pivot = {}
-    for _, coordinate in ipairs({ "x", "y", "z" }) do
-        local value = measured and measured.units and measured.units[coordinate]
-        if finite(value) then
-            pivot[coordinate] = value
-        else
-            pivot[coordinate] = axisPreset[coordinate] or preset[coordinate] or 0
-        end
-    end
-    return pivot
+    local pivot = profile and profile.pivot or {}
+    return { x = pivot.x or 0, y = pivot.y or 0, z = pivot.z or 0 }
 end
 
 function ItemProfiles.Dimensions(decorID, measurements)
@@ -44,24 +33,39 @@ function ItemProfiles.Dimensions(decorID, measurements)
     return dimensions
 end
 
+function ItemProfiles.Pivot(decorID, ring, measurements)
+    local item = measurements and measurements[decorID]
+    local measured = item and item.pivot and item.pivot[ring]
+    local pivot = loggedPivot(decorID)
+    for _, axis in ipairs({ "x", "y", "z" }) do
+        local value = measured and measured.units and measured.units[axis]
+        if finite(value) then pivot[axis] = value end
+    end
+    return pivot
+end
+
 function ItemProfiles.ResizePivot(decorID, measurements)
     local item = measurements and measurements[decorID]
     local units = item and item.resizePivot and item.resizePivot.units
     if units and finite(units.x) and finite(units.y) and finite(units.z) then
         return { x = units.x, y = units.y, z = units.z }, true
     end
-    local profile = ItemProfiles.ByDecorID[decorID]
-    local preset = profile and profile.resizePivot
-    if preset then return { x = preset.x or 0, y = preset.y or 0, z = preset.z or 0 } end
-    return ItemProfiles.Pivot(decorID)
+    return loggedPivot(decorID), false
+end
+
+function ItemProfiles.Calibration(decorID, measurements)
+    local pivots = {}
+    for _, ring in ipairs({ "x", "y", "z" }) do pivots[ring] = ItemProfiles.Pivot(decorID, ring, measurements) end
+    return { pivots = pivots, resizePivot = (ItemProfiles.ResizePivot(decorID, measurements)),
+        axes = MHT.RotationAxes.ForItem(decorID, measurements) }
 end
 
 function ItemProfiles.CalibratedDimensions(decorID, measurements)
     local dimensions, reason = ItemProfiles.Dimensions(decorID, measurements)
     if not dimensions then return nil, reason end
     local item = measurements[decorID]
-    for _, axis in ipairs({ "x", "y", "z" }) do
-        if not (item.pivot and item.pivot[axis] and item.pivot[axis].units) then
+    for _, ring in ipairs({ "x", "y", "z" }) do
+        if not (item.pivot and item.pivot[ring] and item.pivot[ring].units) then
             return nil, "Save pivots for all three rotation axes before building this shape."
         end
     end

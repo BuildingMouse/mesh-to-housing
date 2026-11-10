@@ -1,6 +1,6 @@
 local _, MHT = ...
-local Shape = {}
-MHT.Rhombicosidodecahedron = Shape
+local Rhombicosidodecahedron = {}
+MHT.Layout.Solids.rhombicosidodecahedron = Rhombicosidodecahedron
 
 local function dot(a, b) return a.x * b.x + a.y * b.y + a.z * b.z end
 local function subtract(a, b) return { x = a.x - b.x, y = a.y - b.y, z = a.z - b.z } end
@@ -72,37 +72,23 @@ local function squareFaces()
     return faces
 end
 
-function Shape.Build(settings, dimensions)
-    dimensions = dimensions or { settings.width, settings.width, settings.thickness }
+function Rhombicosidodecahedron.Build(scale, dimensions)
     local side, depth, height = unpack(dimensions)
     if math.abs(side - depth) > 1e-6 * math.max(side, depth) then
         return nil, "This shape needs square tiles: X and Y sizes must match. Adjust the saved sizes if this tile is square."
     end
     if height >= side then return nil, "Use a square tile thinner than its side length." end
-    local scale = settings.scale
     local edge, thickness = side * scale, height * scale
-    local turn = math.rad(settings.rotation)
-    local c, s = math.cos(turn), math.sin(turn)
-    local function turnVector(v) return { x = c * v.x - s * v.y, y = s * v.x + c * v.y, z = v.z } end
     local centerZ = 4 * thickness + ((1 + math.sqrt(5)) / 2) ^ 3 * edge / 2
     local items = {}
     for _, face in ipairs(squareFaces()) do
-        local center, normal = turnVector(face.center), turnVector(face.normal)
-        local rotation = MHT.Transform.HousingRotation(turnVector(face.u), turnVector(face.v), normal)
+        local center, normal = face.center, face.normal
         items[#items + 1] = {
             x = center.x * edge / 2 - normal.x * thickness / 2,
             y = center.y * edge / 2 - normal.y * thickness / 2,
             z = centerZ + center.z * edge / 2 - normal.z * thickness / 2,
-            scale = scale, rotation = rotation, rotationSpace = "housing",
+            scale = scale, rotation = MHT.Rotation.FromAxes(face.u, face.v, normal),
         }
     end
-    return { shape = "rhombicosidodecahedron", items = items, dimensions = { side, depth, height },
-        source = { x = 0, y = 0, z = 0, scale = 1, yaw = 0, rotationSpace = "housing" },
-        settings = { width = side, depth = depth, thickness = height, scale = scale, rotation = settings.rotation } }
-end
-
-function Shape.ForItem(plan, decorID, measurements)
-    local dimensions, reason = MHT.ItemProfiles.CalibratedDimensions(decorID, measurements)
-    if not dimensions then return nil, reason end
-    return Shape.Build(plan.settings, dimensions)
+    return { solid = "rhombicosidodecahedron", scale = scale, items = items, dimensions = { side, depth, height } }
 end

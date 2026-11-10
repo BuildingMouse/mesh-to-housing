@@ -222,12 +222,11 @@ end
 
 function Calibration:RotateCopy()
     self:SetState("rotating", "Rotating the selected copy 180° around " .. self.axis:upper() .. "...")
-    local rotation = { x = 0, y = 0, z = 0 }
-    rotation[self.axis] = 180
-    self.motion:Apply({ x = 0, y = 0, z = 0, rotation = rotation }, self.profile, self.testGUID,
-        function()
-            if self.automatic then self:FitCopy() else self:BeginCapture() end
-        end, true)
+    local turns = { x = 0, y = 0, z = 0 }
+    turns[self.axis] = 180
+    self.motion:Apply({ turns = turns }, self.profile, self.testGUID, function()
+        if self.automatic then self:FitCopy() else self:BeginCapture() end
+    end)
 end
 
 function Calibration:FitCopy()
@@ -248,7 +247,7 @@ function Calibration:MoveTestCopy(shift)
     self.motion:Apply(shift, self.profile, self.testGUID, function()
         self:SetState("committingTest", "Finishing the test copy. Calibration values have not been saved.")
         self.api:Commit()
-    end, true)
+    end)
 end
 
 function Calibration:BeginCopy()
