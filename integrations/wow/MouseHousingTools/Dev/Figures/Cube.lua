@@ -1,6 +1,6 @@
 local _, MHT = ...
 local Cube = {}
-MHT.Cube = Cube
+MHT.Layout.Solids.cube = Cube
 local Rotation = MHT.Rotation
 
 local FACES = {
@@ -22,10 +22,10 @@ function Cube.Build(scale, dimensions)
     local centerZ, inset = 4 * thickness + edge / 2, (edge - thickness) / 2
     local items = {}
     for _, face in ipairs(FACES) do
-        items[#items + 1] = {
-            x = face.normal[1] * inset, y = face.normal[2] * inset, z = centerZ + face.normal[3] * inset,
-            rotation = Rotation.About(face.axis, math.rad(face.degrees)), scale = scale, label = face.label,
-        }
+        items[#items + 1] = MHT.Plan.Placement(face.normal[1] * inset, face.normal[2] * inset,
+            centerZ + face.normal[3] * inset, Rotation.About(face.axis, math.rad(face.degrees)), scale, face.label)
     end
-    return { solid = "cube", scale = scale, items = items, dimensions = { side, depth, height } }
+    local plan = MHT.Plan.New(items, { side, depth, height })
+    plan.fit = function(itemDimensions) return Cube.Build(scale, itemDimensions) end
+    return plan
 end

@@ -3,7 +3,11 @@ local Preview = {}
 Preview.__index = Preview
 MHT.Preview = Preview
 
-local edges = { {1,2}, {2,3}, {3,4}, {4,1}, {5,6}, {6,7}, {7,8}, {8,5}, {1,5}, {2,6}, {3,7}, {4,8} }
+-- The item's outline from Items; placements of other items use their logged shape.
+local function outline(plan, item)
+    local logged = item.item and MHT.ItemProfiles.Logged(item.item) or {}
+    return MHT.ItemProfiles.Outline({ dimensions = MHT.Plan.Box(plan, item), shape = logged.shape })
+end
 
 function Preview.New(parent)
     local self = setmetatable({ lines = {}, yaw = -0.6, pitch = 0.55 }, Preview)
@@ -61,12 +65,19 @@ function Preview:Draw()
         low, high = { 0, 0 }, { 0, 0 }
     end
     for _, item in ipairs(self.plan.items) do all[#all + 1] = item end
+    local function include(p)
+        for a = 1, 2 do low[a], high[a] = math.min(low[a], p[a]), math.max(high[a], p[a]) end
+    end
     for _, item in ipairs(all) do
-        local box = {}
-        for _, vertex in ipairs(MHT.Layout.Corners(item, self.plan.dimensions)) do
-            local p = project(vertex)
+        local vertices, edges = outline(self.plan, item)
+        local box = { edges = edges or {} }
+        include(project({ item.x, item.y, item.z }))
+        for _, vertex in ipairs(vertices or {}) do
+            local offset = MHT.Rotation.Apply(item.rotation,
+                { x = vertex.x * item.scale, y = vertex.y * item.scale, z = vertex.z * item.scale })
+            local p = project({ item.x + offset.x, item.y + offset.y, item.z + offset.z })
             box[#box + 1] = p
-            for a = 1, 2 do low[a], high[a] = math.min(low[a], p[a]), math.max(high[a], p[a]) end
+            include(p)
         end
         boxes[#boxes + 1] = box
     end
@@ -79,7 +90,7 @@ function Preview:Draw()
     local index = 0
     for b, box in ipairs(boxes) do
         local source = self.shape == "stairs" and b == 1
-        for _, edge in ipairs(edges) do
+        for _, edge in ipairs(box.edges) do
             index = index + 1
             local line = self.lines[index]
             if not line then line = self.frame:CreateLine(nil, "ARTWORK"); self.lines[index] = line end

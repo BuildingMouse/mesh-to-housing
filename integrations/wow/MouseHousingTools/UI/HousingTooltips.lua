@@ -1,4 +1,6 @@
 local _, MHT = ...
+local HousingTooltips = {}
+MHT.HousingTooltips = HousingTooltips
 
 local function editing()
     return C_HouseEditor and C_HouseEditor.IsHouseEditorActive() and not InCombatLockdown()
@@ -22,7 +24,7 @@ local function hideHandleTooltip(tooltip)
     end
 end
 
-function MHT.HideHousingHandleTooltips()
+function HousingTooltips.HideHandles()
     -- A pre-call stops Blizzard before it draws the debug tooltip; a post-call
     -- would run before Blizzard's final Show() and let the label reappear.
     TooltipDataProcessor.AddTooltipPreCall(Enum.TooltipDataType.Debug, function(tooltip)
