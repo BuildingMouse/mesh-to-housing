@@ -122,9 +122,9 @@ end
 
 function Resize:BeginResize()
     self:SetState("resizing", "Moving the selected copy up before resizing it...")
-    self.motion:Apply({ x = 0, y = 0, z = self.lift }, self.profile, self.testGUID, function()
+    self.motion:Apply({ z = self.lift }, self.profile, self.testGUID, function()
         self:SetState("resizing", string.format("Resizing the copy to %.0f%%...", self.scale * 100))
-        self.motion:Apply({ x = 0, y = 0, z = 0, scale = self.scale }, self.profile, self.testGUID, function()
+        self.motion:Apply({ scale = self.scale }, self.profile, self.testGUID, function()
             if self.mode == "measure" then
                 self:SetState("measuring", "Use movement keys to stack the smaller tile on the reference: bottom near-left corner to top near-left corner. Then click Aligned.")
                 local started, reason = self.capture:Start()
@@ -147,10 +147,10 @@ function Resize:BeginResize()
                 self.motion:Apply(shift, self.profile, self.testGUID, function()
                     self:SetState(self.completed == 0 and "committingReference" or "committingTest", "Saving the resized test copy...")
                     self.api:Commit()
-                end, true)
+                end)
             end
-        end, true)
-    end, true)
+        end)
+    end)
 end
 
 function Resize:Advance()

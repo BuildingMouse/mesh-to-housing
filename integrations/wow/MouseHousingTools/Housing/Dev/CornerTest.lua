@@ -69,13 +69,12 @@ function Test:BeginTile(selected)
     end
     local dimensions, reason = MHT.ItemProfiles.CalibratedDimensions(selected.decorID, self.measurements)
     if not dimensions then self:Reject(selected, reason); return end
-    local rotationAxes, pivots = MHT.RotationAxes.ForItem(selected.decorID, self.measurements), {}
-    for _, axis in ipairs({ "x", "y", "z" }) do pivots[axis] = MHT.ItemProfiles.Pivot(selected.decorID, axis, self.measurements) end
+    local item = MHT.ItemProfiles.Calibration(selected.decorID, self.measurements)
     local points = {}
     for i, corner in ipairs(Test.Corners) do
         points[i] = { x = corner.x * dimensions[1] / 2, y = corner.y * dimensions[2] / 2, z = 0 }
     end
-    local expected, center = MHT.Transform.RotatePoints(points, self.case.rotation, pivots, rotationAxes)
+    local expected, center = MHT.NativeEdit.TurnedPoints(points, self.case.rotation, item)
     self.predictions = {}
     for i, point in ipairs(points) do
         local shift = {}
@@ -85,13 +84,13 @@ function Test:BeginTile(selected)
         end
         self.predictions[i] = { start = point, expected = expected[i], shift = shift }
     end
-    self.calibration = { decorID = selected.decorID, dimensions = dimensions, axes = rotationAxes, pivots = pivots, center = center }
+    self.calibration = { decorID = selected.decorID, dimensions = dimensions, axes = item.axes, pivots = item.pivots, center = center }
     self.tileGUID, self.activeGUID = selected.decorGUID, selected.decorGUID
     self:SetState("rotatingtile", self.case.id .. ": rotating the tile with raw X → Y → Z commands. Its pivot shift is left visible.")
-    self.motion:Apply({ x = 0, y = 0, z = 0, rotation = self.case.rotation }, self.profile, self.activeGUID, function()
+    self.motion:Apply({ turns = self.case.rotation }, self.profile, self.activeGUID, function()
         self:SetState("committile", "Finishing the tile's in-game rotation...")
         self.api:Commit()
-    end, true)
+    end)
 end
 
 function Test:PromptMarker()
@@ -111,7 +110,7 @@ function Test:BeginMarker(selected)
     self.motion:Apply(shift, self.profile, self.activeGUID, function()
         self:SetState("commitmarker", "Finishing the " .. corner.name .. " marker's in-game move...")
         self.api:Commit()
-    end, true)
+    end)
 end
 
 function Test:Update(elapsed)

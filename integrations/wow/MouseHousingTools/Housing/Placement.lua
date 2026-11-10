@@ -20,7 +20,8 @@ Placement.DEFAULT_WORKFLOW = "batch"
 function Placement.New(api, notify, measurements)
     return setmetatable({
         api = api,
-        motion = MHT.Motion.New(api, measurements),
+        motion = MHT.Motion.New(api),
+        measurements = measurements,
         notify = notify,
         state = "idle",
         completed = 0,
@@ -60,7 +61,6 @@ function Placement:Start(plan, profile, workflow)
     self.profile = profile
     self.workflow = workflow
     self.isTest = false
-    self.rotateFirst = plan.rotateFirst
 
     self.copiesCreated = 0
     self.copyDelay, self.copyRetries, self.retryDelay = BATCH_COPY_DELAY, 0, nil
@@ -251,14 +251,10 @@ function Placement:HandleSelectedCopy(selected)
             .. (target.label and (" " .. target.label) or ""))
     end
     if self.isTest then
-        self.motion:Apply(target, self.profile, guid, done, true, onPhase)
+        self.motion:Apply(target, self.profile, guid, done, onPhase)
     else
-        self.motion:MoveIntoPlace(target, {
-            from = self.plan.source,
-            decorID = self.source.decorID,
-            motionProfile = self.profile,
-            rotateFirst = self.rotateFirst,
-        }, guid, done, onPhase)
+        local item = MHT.ItemProfiles.Calibration(self.source.decorID, self.measurements)
+        self.motion:MoveTo(target, item, self.profile, guid, done, onPhase)
     end
 end
 
@@ -296,18 +292,14 @@ function Placement:Update(elapsed)
         if self.still < 1.2 then return end
 
         if self.state == "arming" then
-            local solid = MHT.Layout.Solids[self.plan.shape]
-            if solid then
-                local plan, reason = solid.ForItem(self.plan, hovered.decorID, self.motion.measurements)
+            if self.plan.solid then
+                -- Figures are rebuilt for the real item, which must be calibrated.
+                local dimensions, reason = MHT.ItemProfiles.CalibratedDimensions(hovered.decorID, self.measurements)
+                if not dimensions then self:Abort(reason); return end
+                local plan
+                plan, reason = MHT.Layout.Solids[self.plan.solid].Build(self.plan.scale, dimensions)
                 if not plan then self:Abort(reason); return end
                 self.plan = plan
-                if self.rotateFirst and plan.settings.scale ~= 1 then
-                    local _, saved = MHT.ItemProfiles.ResizePivot(hovered.decorID, self.motion.measurements)
-                    if not saved then
-                        self:Abort("Save a resize pivot for this item before running a resized figure test.")
-                        return
-                    end
-                end
             end
             local stock, reason = self.api:CheckStock(hovered, #self.plan.items)
             if not stock then self:Abort(reason); return end

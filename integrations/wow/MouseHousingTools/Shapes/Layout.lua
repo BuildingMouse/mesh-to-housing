@@ -1,9 +1,12 @@
 local _, MHT = ...
 local Layout = {}
 MHT.Layout = Layout
+local Rotation = MHT.Rotation
 
-Layout.Solids = { cube = MHT.Cube, rhombicosidodecahedron = MHT.Rhombicosidodecahedron,
-    tilted_circle = MHT.TiltedCircle }
+-- Plans are item positions, turns and sizes relative to the source item.
+-- Nothing here depends on the game movement/rotation mechanics.
+
+Layout.Solids = { cube = MHT.Cube, tilted_circle = MHT.TiltedCircle }
 
 Layout.defaults = {
     shape = "stairs", count = 12, scale = 1,
@@ -20,9 +23,7 @@ local ranges = {
 }
 
 function Layout.Validate(settings)
-    if settings.shape ~= "stairs" and settings.shape ~= "circle" and not Layout.Solids[settings.shape] then
-        return nil, "Choose a shape."
-    end
+    if settings.shape ~= "stairs" and settings.shape ~= "circle" then return nil, "Choose a shape." end
     for key, range in pairs(ranges) do
         local value = settings[key]
         if type(value) ~= "number" or value ~= value or value < range[1] or value > range[2] then
@@ -34,27 +35,12 @@ function Layout.Validate(settings)
 end
 
 function Layout.Corners(item, dimensions)
-    if item.rotation then
-        local corners = {}
-        for _, z in ipairs({ -1, 1 }) do
-            for _, xy in ipairs({ { -1, -1 }, { 1, -1 }, { 1, 1 }, { -1, 1 } }) do
-                local offset = MHT.Transform.PivotOffset(item,
-                    { x = xy[1] * dimensions[1] / 2, y = xy[2] * dimensions[2] / 2, z = z * dimensions[3] / 2 })
-                corners[#corners + 1] = { item.x + offset.x, item.y + offset.y, item.z + offset.z }
-            end
-        end
-        return corners
-    end
-    local c, s = math.cos(item.yaw), math.sin(item.yaw)
     local corners = {}
     for _, z in ipairs({ -1, 1 }) do
         for _, xy in ipairs({ { -1, -1 }, { 1, -1 }, { 1, 1 }, { -1, 1 } }) do
-            local x = xy[1] * dimensions[1] * item.scale / 2
-            local y = xy[2] * dimensions[2] * item.scale / 2
-            corners[#corners + 1] = {
-                item.x + c * x - s * y, item.y + s * x + c * y,
-                item.z + z * dimensions[3] * item.scale / 2,
-            }
+            local offset = Rotation.Apply(item.rotation, { x = xy[1] * dimensions[1] * item.scale / 2,
+                y = xy[2] * dimensions[2] * item.scale / 2, z = z * dimensions[3] * item.scale / 2 })
+            corners[#corners + 1] = { item.x + offset.x, item.y + offset.y, item.z + offset.z }
         end
     end
     return corners
@@ -63,7 +49,6 @@ end
 function Layout.Build(settings)
     local valid, reason = Layout.Validate(settings)
     if not valid then return nil, reason end
-    if Layout.Solids[settings.shape] then return Layout.Solids[settings.shape].Build(settings) end
     local items = {}
     local totalAngle = settings.turns * 2 * math.pi
     local run = settings.spacing
@@ -71,21 +56,21 @@ function Layout.Build(settings)
         run = settings.radius * math.abs(totalAngle) / (settings.count - 1)
     end
     for i = 0, settings.count - 1 do
-        local item = { x = 0, y = i * run, z = i * run * math.tan(math.rad(settings.slope)),
-                       yaw = 0, scale = settings.scale }
+        local item = { x = 0, y = i * run, z = i * run * math.tan(math.rad(settings.slope)), scale = settings.scale }
+        local heading = 0
         if settings.shape == "circle" then
             local angle = i * 2 * math.pi / settings.count
             item.x = settings.radius * math.sin(angle)
             item.y = settings.radius * (1 - math.cos(angle))
-            item.z, item.yaw = 0, angle
+            item.z, heading = 0, angle
         elseif totalAngle ~= 0 then
             local angle = i * totalAngle / (settings.count - 1)
             local direction = totalAngle > 0 and 1 or -1
             item.x = direction * settings.radius * (1 - math.cos(angle))
             item.y = settings.radius * math.sin(math.abs(angle))
-            item.yaw = -angle
+            heading = -angle
         end
-        item.yaw = item.yaw + math.rad(settings.rotation)
+        item.rotation = Rotation.About("z", heading + math.rad(settings.rotation))
         items[#items + 1] = item
     end
     local dimensions = { settings.width, settings.depth, settings.thickness }
@@ -99,6 +84,6 @@ function Layout.Build(settings)
     for _, item in ipairs(items) do item.y = item.y + offset end
     return {
         items = items, dimensions = dimensions, spacing = run,
-        source = { x = 0, y = 0, z = 0, yaw = 0, scale = 1 },
+        source = { x = 0, y = 0, z = 0, scale = 1, rotation = Rotation.Identity() },
     }
 end

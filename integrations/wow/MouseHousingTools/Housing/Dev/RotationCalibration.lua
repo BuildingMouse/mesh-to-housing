@@ -57,12 +57,12 @@ function Calibration:Begin(selected)
     end
     self.source, self.guid = selected, selected.decorGUID
     if not self.draft or self.draft.decorID ~= selected.decorID then self:Load(selected) end
-    local rotation = { x = 0, y = 0, z = 0 }
-    rotation[self.axis] = 90
+    local turns = { x = 0, y = 0, z = 0 }
+    turns[self.axis] = 90
     self:SetState("rotating", "Adding +90° on " .. self.axis:upper() .. " from the copy's placed pose. Watch its original top surface.")
-    self.motion:Apply({ x = 0, y = 0, z = 0, rotation = rotation }, self.profile, self.guid, function()
+    self.motion:Apply({ turns = turns }, self.profile, self.guid, function()
         self:SetState("observe", "Choose where the original top surface faces. If it stayed up, follow the original forward edge.")
-    end, true)
+    end)
 end
 
 function Calibration:Update(elapsed)

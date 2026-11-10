@@ -59,10 +59,8 @@ function Panel:Preview()
         self.reason = "Item size must be between 20% and 200%."
     end
     if not self.reason then
-        self.plan, self.reason = MHT.Layout.Solids[self.case.shape].Build({
-            width = 2, depth = 2, thickness = 0.25, scale = percent / 100, rotation = 0,
-        })
-        if self.plan then self.plan.rotateFirst = true end
+        -- Example tile proportions; placement refits to the saved item size.
+        self.plan, self.reason = MHT.Layout.Solids[self.case.shape].Build(percent / 100, { 2, 2, 0.25 })
     end
     self.preview:SetPlan(self.plan, self.case.shape)
 end

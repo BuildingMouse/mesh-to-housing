@@ -313,7 +313,7 @@ function Window:StartTest()
     end
     if not self:ValidRotationSettings() then return end
     local ok, started, reason = pcall(self.placement.StartTest, self.placement,
-        { x = s.x, y = s.y, z = s.z, rotation = { x = s.rx, y = s.ry, z = s.rz } },
+        { x = s.x, y = s.y, z = s.z, turns = { x = s.rx, y = s.ry, z = s.rz } },
         self:MotionProfile())
     if not ok then
         self.placement:Abort(tostring(started))
