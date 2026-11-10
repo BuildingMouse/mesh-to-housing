@@ -3,20 +3,11 @@ local Base = MHT.Calibration
 local Resize = setmetatable({}, { __index = Base })
 Resize.__index = Resize
 MHT.ResizeCalibration = Resize
+local copy = MHT.Util.Copy
+local finite = MHT.Util.Finite
 
 local coordinates = { "x", "y", "z" }
 local speeds = { x = "right", y = "forward", z = "up" }
-
-local function copy(value)
-    if type(value) ~= "table" then return value end
-    local result = {}
-    for key, entry in pairs(value) do result[key] = copy(entry) end
-    return result
-end
-
-local function finite(value)
-    return type(value) == "number" and value == value and math.abs(value) < math.huge
-end
 
 function Resize.New(api, capture, measurements, notify)
     return setmetatable(Base.New(api, capture, measurements, notify), Resize)

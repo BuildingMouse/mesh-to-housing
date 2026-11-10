@@ -1,6 +1,7 @@
 local _, MHT = ...
 local ItemProfiles = {}
 MHT.ItemProfiles = ItemProfiles
+local finite = MHT.Util.Finite
 
 -- Pivot from the visual center, in movement units at scale 1.
 -- +X is right, +Y is forward, +Z is up in the item's default orientation.
@@ -10,10 +11,6 @@ ItemProfiles.ByDecorID = {
         pivot = { x = 0.8, y = 4 / 3, z = 0 },
     },
 }
-
-local function finite(value)
-    return type(value) == "number" and value == value and math.abs(value) < math.huge
-end
 
 function ItemProfiles.Pivot(decorID, axis, measurements)
     local profile = ItemProfiles.ByDecorID[decorID]
@@ -39,7 +36,7 @@ function ItemProfiles.Dimensions(decorID, measurements)
     for i, axis in ipairs({ "x", "y", "z" }) do
         local record = item and item.size and item.size[axis]
         local value = record and record.units and record.units[axis]
-        if type(value) ~= "number" or value ~= value or value <= 0 or value == math.huge then
+        if not finite(value) or value <= 0 then
             return nil, "Save all three size measurements for this item before building this shape."
         end
         dimensions[i] = value
