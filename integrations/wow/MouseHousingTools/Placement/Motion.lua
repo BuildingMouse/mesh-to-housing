@@ -75,6 +75,7 @@ end
 function Motion:Begin(queue, guid, done, onPhase)
     self:Stop()
     self.queue, self.guid, self.done, self.onPhase = queue, guid, done, onPhase
+    self.submode = nil
 end
 
 function Motion:Stop()
@@ -84,9 +85,21 @@ function Motion:Stop()
     self.active, self.queue, self.phase = {}, nil, nil
 end
 
+-- The editor changes submode a few frames late; keys held before then act in the old one.
+function Motion:SubmodeReady()
+    return not self.submode or self.api:InSubmode(self.submode)
+end
+
+function Motion:WaitForSubmode(elapsed)
+    self.phase.modeWait = (self.phase.modeWait or 0) + elapsed
+    if self.phase.modeWait > 3 then error("Editing mode did not become ready. Try again.") end
+end
+
 function Motion:Update(elapsed)
     if not self.queue then return end
     local selected = self.api:Selected()
+    -- The selection can drop for a moment while the submode changes.
+    if not selected and self.phase and not self.phase.started then self:WaitForSubmode(elapsed); return end
     if not selected or selected.decorGUID ~= self.guid then error("Selection changed; placement stopped.") end
     if elapsed > 0.25 and next(self.active) then error("Frame delay interrupted timed movement. Try again.") end
     if not self.phase then
@@ -97,20 +110,43 @@ function Motion:Update(elapsed)
             done()
             return
         end
-        if self.phase.mode then self.api:PrepareSubmode(self.phase.mode, self.phase.reset) end
-        for _ = 1, self.phase.cycles or 0 do self.api:CycleRotationAxis() end
+        if self.phase.mode then
+            self.submode = self.phase.mode
+            self.api:PrepareSubmode(self.phase.mode)
+            if not self.queue then return end
+        end
+        self.phase.setup = true
+    end
+    if self.phase.setup then
+        if not self:SubmodeReady() then self:WaitForSubmode(elapsed); return end
+        if self.phase.reset and not self.phase.resetDone then
+            -- Reset acts on the active submode: resetting before Scale is active would undo the move.
+            self.phase.resetDone = true
+            self.api:ResetSubmode()
+            if not self.queue then return end
+            if not self:SubmodeReady() then self:WaitForSubmode(elapsed); return end
+        end
+        self.phase.setup = nil
+        for _ = 1, self.phase.cycles or 0 do
+            self.api:CycleRotationAxis()
+            if not self.queue then return end
+        end
         if self.onPhase then self.onPhase(self.phase.label) end
+        if not self.queue then return end
         self.phase.wait = PHASE_WAIT
         return
     end
     if self.phase.wait then
-        self.phase.wait = self.phase.wait - elapsed
+        self.phase.wait = math.max(0, self.phase.wait - elapsed)
         if self.phase.wait > 0 then return end
+        if not self:SubmodeReady() then self:WaitForSubmode(elapsed); return end
         self.phase.wait = nil
         for _, control in ipairs(self.phase.controls) do
             self.active[control.name] = control.duration
             self.api:Increment(control.name, true)
+            if not self.queue then return end
         end
+        self.phase.started = true
         return
     end
     for name, remaining in pairs(self.active) do
