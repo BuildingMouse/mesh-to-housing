@@ -5,7 +5,7 @@ MHT.Preview = Preview
 
 -- Draws a plan's items as outlines (or points) in a turnable 3D view.
 
-local SOURCE_OPACITY = 0.12
+local SOURCE_OPACITY, SEAM_OPACITY = 0.12, 0.3
 
 -- The item's outline from Items; placements of other items use their logged shape.
 local function outline(plan, item)
@@ -65,8 +65,10 @@ function Preview:Draw()
     if w < 32 or h < 32 then return end
     local c, s = math.cos(self.yaw), math.sin(self.yaw)
     local cp, sp = math.cos(self.pitch), math.sin(self.pitch)
+    -- Screen X and Y, and depth toward the viewer.
     local function project(p)
-        return { c * p[1] - s * p[2], sp * (s * p[1] + c * p[2]) + cp * p[3] }
+        local along = s * p[1] + c * p[2]
+        return { c * p[1] - s * p[2], sp * along + cp * p[3], -cp * along + sp * p[3] }
     end
 
     local source = not self.compact and plan.source
@@ -80,11 +82,11 @@ function Preview:Draw()
     local shapes = {}
     for _, item in ipairs(items) do
         local center = project({ item.x, item.y, item.z })
-        local drawn = { center = center, edges = {}, source = item == source }
+        local drawn = { center = center, source = item == source }
         include(center)
         if not self.pointMode then
-            local vertices, edges = outline(plan, item)
-            drawn.edges = edges or {}
+            local vertices, edges, faces = outline(plan, item)
+            drawn.edges, drawn.faces = edges, faces
             for _, vertex in ipairs(vertices or {}) do
                 local offset = MHT.Rotation.Apply(item.rotation,
                     { x = vertex.x * item.scale, y = vertex.y * item.scale, z = vertex.z * item.scale })
@@ -104,10 +106,8 @@ function Preview:Draw()
                h / 2 + (p[2] - (low[2] + high[2]) / 2) * scale
     end
     local color = MHT.Theme.Colors.preview
-    local lineIndex = 0
-    for i, drawn in ipairs(shapes) do
-        local alpha = color[4] * (drawn.source and SOURCE_OPACITY or 1)
-        if self.pointMode then
+    if self.pointMode then
+        for i, drawn in ipairs(shapes) do
             local point = self.points[i]
             if not point then
                 point = self.frame:CreateTexture(nil, "ARTWORK")
@@ -115,26 +115,36 @@ function Preview:Draw()
                 self.points[i] = point
             end
             local x, y = screen(drawn.center)
-            point:SetColorTexture(color[1], color[2], color[3], alpha)
+            point:SetColorTexture(color[1], color[2], color[3], color[4] * (drawn.source and SOURCE_OPACITY or 1))
             point:ClearAllPoints()
             point:SetPoint("CENTER", self.frame, "BOTTOMLEFT", x, y)
             point:Show()
-        else
-            for _, edge in ipairs(drawn.edges) do
-                lineIndex = lineIndex + 1
-                local line = self.lines[lineIndex]
-                if not line then
-                    line = self.frame:CreateLine(nil, "ARTWORK")
-                    line:SetThickness(1)
-                    self.lines[lineIndex] = line
+        end
+    else
+        local outlines = {}
+        for _, drawn in ipairs(shapes) do
+            if drawn.faces then
+                local vertices = {}
+                for i, p in ipairs(drawn) do
+                    local x, y = screen(p)
+                    vertices[i] = { x, y, p[3] * scale }
                 end
-                local x1, y1 = screen(drawn[edge[1]])
-                local x2, y2 = screen(drawn[edge[2]])
-                line:SetStartPoint("BOTTOMLEFT", self.frame, x1, y1)
-                line:SetEndPoint("BOTTOMLEFT", self.frame, x2, y2)
-                line:SetColorTexture(color[1], color[2], color[3], alpha)
-                line:Show()
+                outlines[#outlines + 1] = { vertices = vertices, faces = drawn.faces, edges = drawn.edges,
+                    source = drawn.source }
             end
+        end
+        for index, segment in ipairs(MHT.HiddenLines.Visible(outlines, w, h)) do
+            local line = self.lines[index]
+            if not line then
+                line = self.frame:CreateLine(nil, "ARTWORK")
+                self.lines[index] = line
+            end
+            line:SetStartPoint("BOTTOMLEFT", self.frame, segment.a[1], segment.a[2])
+            line:SetEndPoint("BOTTOMLEFT", self.frame, segment.b[1], segment.b[2])
+            line:SetThickness(segment.seam and 0.75 or 1)
+            line:SetColorTexture(color[1], color[2], color[3], color[4]
+                * (segment.owner.source and SOURCE_OPACITY or 1) * (segment.seam and SEAM_OPACITY or 1))
+            line:Show()
         end
     end
     if self.compact or source then return end
