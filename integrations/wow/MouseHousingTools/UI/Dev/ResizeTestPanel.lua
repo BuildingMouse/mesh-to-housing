@@ -12,7 +12,7 @@ function Panel.New(parent, controller, settings, copySettings, start, finish, no
     UI.Text(self.frame, "Resized corner test", 18, 120, 260, "GameFontNormalLarge")
     self.size = UI.Number(self.frame, "Item size (20–200%)", 18, 165, settings.percent,
         function(value) settings.percent = value; self:Preview() end)
-    self.workflow = UI.Check(self.frame, "Move first copy aside", 18, 225, copySettings.workflow == "aside",
+    self.workflow = UI.Check(self.frame, "Move copies aside", 18, 225, copySettings.workflow == "aside",
         function(checked) copySettings.workflow = checked and "aside" or "double" end)
     UI.Text(self.frame,
         "Start with two fresh copies at 100%. Confirm they overlap, then select each copy. Both resize to the chosen size and meet at opposite corners. Saved dimensions and a saved resize pivot are required.",
@@ -55,7 +55,7 @@ function Panel:Refresh(blocked)
     self.start:SetEnabled(not blocked)
     self.finish:SetEnabled(own)
     self.next:SetEnabled(own and c.api:Mode() == Enum.HouseEditorMode.ExpertDecor
-        and (c.state == "align" or c.state == "moveaside"))
-    self.next:SetText(c.state == "moveaside" and "Moved aside" or "Copies overlap")
+        and c.state == "align")
+    self.next:SetText("Copies overlap")
     self.progress:SetText(c.mode == "corners" and string.format("%d / 2", c.completed or 0) or "")
 end

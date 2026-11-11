@@ -211,7 +211,7 @@ function Calibration:Start(kind, axis, workflow, profile, automatic)
     self.trial = automatic and copy(kind == "size" and self.sizeDraft or self.draft) or nil
     self.source, self.cursor, self.hoverGUID, self.hoverX, self.hoverY = nil, nil, nil, nil, nil
     self.still, self.created, self.copies, self.testGUID, self.result = 0, 0, {}, nil, nil
-    self.asideGUID, self.copyVariants = nil, nil
+    self.asideGUID, self.copyVariants, self.asideShift = nil, nil, nil
     self.saved = self.api:SaveSettings()
     self:SetState("arming", automatic
         and ("Hover " .. (self.trial.name or ("item " .. self.trial.decorID))
@@ -255,6 +255,38 @@ function Calibration:BeginCopy()
     self.api:BeginColorCopy(self.source, 2 - self.created, self.copyVariants[self.created + 1])
 end
 
+function Calibration:CheckAlignment()
+    self:SetState("align", self.automatic
+        and (self.kind == "size"
+            and "Select a new test copy and check the copies overlap at the same size and orientation. Then Run test to move by the full X, Y and Z sizes."
+            or "Select a new test copy and check the two copies overlap at the same size and orientation. Then Run test; rotation and fitting are automatic.")
+        or "Select one of the two copies and check they overlap exactly at the same size and orientation. Move it to match if needed, then Start measurement.")
+end
+
+-- Both copies get the same shift, so the second lands exactly on the first.
+function Calibration:MoveAside(selected)
+    local first = self.created == 1
+    local guid = selected.decorGUID
+    if first then self.asideGUID = guid else self.testGUID = guid end
+    if not self.asideShift then
+        local dimensions = MHT.ItemProfiles.Dimensions(self.source.decorID, self.measurements)
+        self.asideShift = { x = math.max(4, dimensions and dimensions[1] * 1.5 or 0) }
+    end
+    self:SetState(first and "shiftingAside" or "matchingAside", first
+        and "Moving the first copy aside. Keep the cursor at the original source spot for the second copy; keep the camera still."
+        or "Moving the second copy to the same spot as the first. Keep the camera still.")
+    self.motion:Apply(self.asideShift, self.profile, guid, function()
+        if first then
+            self:SetState("committingAside", "Saving the first copy before placing the second...")
+            self.api:Commit()
+        else
+            self.api:RestoreSettings(self.saved)
+            self.saved = nil
+            self:CheckAlignment()
+        end
+    end)
+end
+
 function Calibration:ValidCopy(selected)
     if not selected or not selected.decorGUID then return false end
     if selected.decorGUID == self.source.decorGUID or selected.decorID ~= self.source.decorID then return false end
@@ -275,17 +307,13 @@ end
 
 function Calibration:Advance()
     local selected = self.api:Selected()
-    if self.state == "moveaside" or self.state == "align" then
+    if self.state == "moveaside" or self.state == "matchaside" then
+        return nil, "Click the new copy; it moves aside automatically."
+    end
+    if self.state == "align" then
         if self.api:Mode() ~= Enum.HouseEditorMode.ExpertDecor then
             return nil, "Return to Advanced mode and select a calibration copy."
         end
-    end
-    if self.state == "moveaside" then
-        if not self:ValidCopy(selected) then return nil, "Click the first calibration copy and move it aside first." end
-        self.asideGUID = selected.decorGUID
-        self:SetState("committingAside", "Saving the copy moved aside...")
-        self.api:Commit()
-    elseif self.state == "align" then
         if not self:ValidCopy(selected) then return nil, "Select a calibration copy, not the original source." end
         self.testGUID = selected.decorGUID
         if self.kind == "size" then
@@ -364,23 +392,32 @@ function Calibration:Update(elapsed)
         and not self.api:HasPendingCopy() then
         self:BeginCopy()
     elseif self.state == "expertAside" and mode == Enum.HouseEditorMode.ExpertDecor then
-        self:SetState("moveaside", "Click the first copy, move it aside with keybinds, then click Moved aside. Do not rotate or resize it.")
+        self:SetState("moveaside", "Click the first copy. It moves aside automatically. Keep the cursor here until the second copy is placed.")
     elseif self.state == "expert" and mode == Enum.HouseEditorMode.ExpertDecor then
-        self:SetState("align", self.automatic
-            and (self.kind == "size"
-                and "Select a new test copy and check the copies overlap at the same size and orientation. Then Run test to move by the full X, Y and Z sizes."
-                or "Select a new test copy and check the two copies overlap at the same size and orientation. Then Run test; rotation and fitting are automatic.")
-            or "Select one of the two copies and check they overlap exactly at the same size and orientation. Move it to match if needed, then Start measurement.")
+        if self.workflow == "aside" then
+            self:SetState("matchaside", "Click the second copy. It moves to the same spot as the first.")
+        else
+            self:CheckAlignment()
+        end
+    elseif self.state == "moveaside" or self.state == "matchaside" then
+        local selected = self.api:Selected()
+        if self:ValidCopy(selected) and (self.state == "moveaside" or selected.decorGUID ~= self.asideGUID) then
+            self:MoveAside(selected)
+        end
     elseif self.state == "measuring" and not self.capture:Busy() then
         self:Abort((self.capture.stopReason or "Movement capture stopped.") .. " Calibration was not saved.")
     end
-    if (self.state == "align" or self.state == "moveaside" or self.state == "rotating"
+    if (self.state == "align" or self.state == "moveaside" or self.state == "matchaside"
+        or self.state == "shiftingAside" or self.state == "matchingAside" or self.state == "rotating"
         or self.state == "fitting" or self.state == "measuring")
         and mode ~= Enum.HouseEditorMode.ExpertDecor then
         self:Abort("Editor mode changed; calibration stopped.")
         return
     end
-    if self.state == "rotating" or self.state == "fitting" then self.motion:Update(elapsed) end
+    if self.state == "shiftingAside" or self.state == "matchingAside"
+        or self.state == "rotating" or self.state == "fitting" then
+        self.motion:Update(elapsed)
+    end
     if self.age > 10 and (self.state == "basic" or self.state == "copy" or self.state == "placing" or self.state == "nextcopy"
         or self.state == "expert" or self.state == "expertAside" or self.state == "committing" or self.state == "committingTest"
         or self.state == "committingAside") then
@@ -402,19 +439,22 @@ function Calibration:OnEvent(event, ...)
         self.created = self.created + 1
         if guid then self.copies[#self.copies + 1] = guid end
         if self.created == 1 and self.workflow == "aside" then
-            self:SetState("expertAside", "Switching to Advanced mode so you can move the first copy aside.")
+            self:SetState("expertAside", "Switching to Advanced mode. Click the first copy to move it aside.")
             self.api:Switch("ExpertDecor")
         elseif self.created == 1 then
             self:SetState("nextcopy", "First copy placed. Keep the mouse still for the second.")
         else
-            self.api:RestoreSettings(self.saved)
-            self.saved = nil
+            -- Aside copies keep the placement settings until the second copy has moved.
+            if self.workflow ~= "aside" then
+                self.api:RestoreSettings(self.saved)
+                self.saved = nil
+            end
             self:SetState("expert", "Copies created. Switching to Advanced mode to check their alignment.")
             self.api:Switch("ExpertDecor")
         end
     elseif self.state == "committingAside" and not isNew and (not guid or guid == self.asideGUID) then
         self.still, self.hoverGUID = 0, nil
-        self:SetState("returnsource", "Return the mouse to the exact original source spot and hover it until the second copy is placed.")
+        self:SetState("returnsource", "First copy moved aside. Keep the cursor over the original source spot for the second copy.")
         self.api:Switch("BasicDecor")
     elseif self.state == "committing" and not isNew and (not guid or guid == self.testGUID) then
         if self.kind == "pivot" then

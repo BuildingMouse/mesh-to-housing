@@ -5,7 +5,7 @@ events:RegisterEvent("ADDON_LOADED")
 local function stopOnError(action, ...)
     local ok, reason = pcall(action, ...)
     if not ok and MHT.window then
-        MHT.window:EndPlacement(tostring(reason))
+        MHT.window:EndPlacement(MHT.Util.ErrorText(reason))
     end
 end
 

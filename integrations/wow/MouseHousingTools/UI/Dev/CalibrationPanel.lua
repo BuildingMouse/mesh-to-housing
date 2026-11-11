@@ -24,7 +24,7 @@ function CalibrationPanel.New(parent, api, capture, settings, start, notify, tes
     local body = CreateFrame("Frame", nil, self.frame)
     body:SetAllPoints(self.frame)
     self.measurementFrame = body
-    self.workflow = UI.Check(body, "Move the first copy aside before placing the second", 18, 180,
+    self.workflow = UI.Check(body, "Move copies aside", 18, 180,
         settings.workflow == "aside", function(checked) settings.workflow = checked and "aside" or "double"; self:Refresh() end)
     self.guide = UI.Text(body, "", 18, 220, 740)
     self.item = UI.Text(body, "No item measured yet.", 18, 285, 740)
@@ -229,9 +229,8 @@ function CalibrationPanel:Refresh()
     end
     self.displayedDraft = draft
     self.nextButton:SetEnabled(busy and c.api:Mode() == Enum.HouseEditorMode.ExpertDecor
-        and (state == "moveaside" or state == "align" or state == "measuring"))
-    self.nextButton:SetText(state == "moveaside" and "Moved aside"
-        or state == "measuring" and (s.kind == "pivot" and "Aligned" or "Faces touch")
+        and (state == "align" or state == "measuring"))
+    self.nextButton:SetText(state == "measuring" and (s.kind == "pivot" and "Aligned" or "Faces touch")
         or c and c.automatic and state == "align" and "Run test" or "Start measurement")
     local showMessage = busy or c and c.kind == s.kind and c.axis == s.axis and (state == "review" or state == "done")
     self.guide:SetText(showMessage and self.message or s.kind == "pivot"

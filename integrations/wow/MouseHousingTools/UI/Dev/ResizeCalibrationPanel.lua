@@ -8,7 +8,7 @@ function Panel.New(parent, api, capture, settings, start, notify, test)
     local UI = MHT.UI
     self.frame = CreateFrame("Frame", nil, parent)
     self.frame:SetAllPoints(parent)
-    self.workflow = UI.Check(self.frame, "Move the first copy aside before placing the second", 18, 180,
+    self.workflow = UI.Check(self.frame, "Move copies aside", 18, 180,
         settings.workflow == "aside", function(checked) settings.workflow = checked and "aside" or "double" end)
     self.guide = UI.Text(self.frame, "", 18, 220, 740)
     self.item = UI.Text(self.frame, "No resize pivot measured yet.", 18, 285, 740)
@@ -94,8 +94,8 @@ function Panel:Refresh(blocked)
     self.test:SetEnabled(not locked and draft ~= nil)
     self.save:SetEnabled(not locked and draft ~= nil)
     self.next:SetEnabled(busy and c.api:Mode() == Enum.HouseEditorMode.ExpertDecor
-        and (c.state == "align" or c.state == "moveaside" or c.state == "measuring"))
-    self.next:SetText(c.state == "moveaside" and "Moved aside" or c.state == "measuring" and "Aligned" or "Copies overlap")
+        and (c.state == "align" or c.state == "measuring"))
+    self.next:SetText(c.state == "measuring" and "Aligned" or "Copies overlap")
     self.guide:SetText(self.message or "Measure or load the resize pivot. Saved X, Y and Z sizes are needed; rotation calibration is not required.")
     local shown = not busy and draft or c.source
     self.item:SetText(shown and ((shown.name or "Item") .. " (" .. shown.decorID .. ")") or "No resize pivot measured yet.")

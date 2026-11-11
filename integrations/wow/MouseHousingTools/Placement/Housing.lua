@@ -103,13 +103,20 @@ function API:Cancel()
     C_HousingDecor.CancelActiveEditing()
 end
 
-function API:PrepareSubmode(mode, reset)
+function API:PrepareSubmode(mode)
     local submode = Enum.HousingPrecisionSubmode[mode]
     if C_HousingExpertMode.GetPrecisionSubmodeRestriction(submode) ~= Enum.HousingExpertSubmodeRestriction.None then
         error("This item cannot use " .. mode:lower() .. " mode.")
     end
     C_HousingExpertMode.SetPrecisionSubmode(submode)
-    if reset then C_HousingExpertMode.ResetPrecisionChanges(true) end
+end
+
+function API:InSubmode(mode)
+    return C_HousingExpertMode.GetPrecisionSubmode() == Enum.HousingPrecisionSubmode[mode]
+end
+
+function API:ResetSubmode()
+    C_HousingExpertMode.ResetPrecisionChanges(true)
 end
 
 function API:Increment(name, active)
