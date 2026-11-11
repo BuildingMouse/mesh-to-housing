@@ -8,6 +8,9 @@ local finite = MHT.Util.Finite
 -- What isn't logged or saved is assumed: all rotation axes and the resize
 -- pivot meet at the item's center and the dimensions are unknown.
 
+-- Shape previews use this item's size until the real item is known.
+ItemProfiles.DEFAULT_DECOR_ID = 23553
+
 local RINGS = { "x", "y", "z" }
 
 local function saved(decorID, measurements)

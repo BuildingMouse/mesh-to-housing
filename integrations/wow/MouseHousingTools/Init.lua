@@ -1,4 +1,8 @@
 local addonName, MHT = ...
+
+-- Shows the Developer tools button. Change it, then /reload.
+MHT.DEV_MODE = true
+
 local events = CreateFrame("Frame")
 events:RegisterEvent("ADDON_LOADED")
 
@@ -13,21 +17,10 @@ local function initialize()
     MouseHousingToolsDB = MouseHousingToolsDB or {}
     local db = MouseHousingToolsDB
 
-    db.settings = db.settings or {}
-    for key, value in pairs(MHT.Layout.defaults) do
-        if db.settings[key] == nil then db.settings[key] = value end
-    end
-
-    if not MHT.Layout.Validate(db.settings) then
-        db.settings = {}
-        for key, value in pairs(MHT.Layout.defaults) do
-            db.settings[key] = value
-        end
-    end
-
+    db.settings = MHT.Layout.Load(db.settings or {})
     db.ui = db.ui or {}
 
-    MHT.HousingTooltips.HideHandles()
+    MHT.EditorChrome.HideHandleTooltips()
     MHT.window = MHT.Window.New(db.settings, db.ui)
     MHT.editorControls = MHT.EditorControls.New(MHT.window)
 

@@ -49,6 +49,7 @@ local function phases(edit, profile, resetScale)
             end
         end
     end
+    if #result > 1 then result[#result + 1] = { mode = "Translate", label = "Finishing", controls = {} } end
     return result
 end
 
@@ -92,7 +93,7 @@ end
 
 function Motion:WaitForSubmode(elapsed)
     self.phase.modeWait = (self.phase.modeWait or 0) + elapsed
-    if self.phase.modeWait > 3 then error("Editing mode did not become ready. Try again.") end
+    if self.phase.modeWait > 3 then error("Editing mode did not become ready. Click the copy again.") end
 end
 
 function Motion:Update(elapsed)

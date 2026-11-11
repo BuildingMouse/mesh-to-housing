@@ -293,6 +293,12 @@ function Placement:Update(elapsed)
         if self.still < 1.2 then return end
 
         if self.state == "arming" then
+            local required = self.plan.requires
+            if required and hovered.decorID ~= required then
+                local name = MHT.ItemProfiles.Logged(required).name or ("decor item " .. required)
+                self:Abort("Use " .. name .. " for this model.")
+                return
+            end
             if self.plan.fit then
                 -- Fitted plans are rebuilt for the real item's size.
                 local dimensions, reason = MHT.ItemProfiles.Dimensions(hovered.decorID, self.measurements)

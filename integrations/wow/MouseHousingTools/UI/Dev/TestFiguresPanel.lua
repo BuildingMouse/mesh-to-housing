@@ -20,17 +20,21 @@ function Panel.New(parent, start, finish, settings)
     self.frame = CreateFrame("Frame", nil, parent)
     self.frame:SetAllPoints(parent)
     self.title = UI.Text(self.frame, "", 18, 120, 260, "GameFontNormalLarge")
-    self.description = UI.Text(self.frame, "", 18, 160, 260)
+    self.description = UI.Muted(self.frame, "", 18, 160, 260)
     self.size = UI.Number(self.frame, "Item size (20–200%)", 18, 225, settings.percent,
         function(value) settings.percent = value; self:Preview() end)
     UI.Text(self.frame,
-        "Uses saved sizes, pivots and rotation axes. Resizing also needs a saved resize pivot. Start with a calibrated copy at 100%. Each tile rotates, resizes, then moves into place. The figure starts four resized tile thicknesses above the source.",
+        "Uses saved size, pivots and axes. Resizing needs a saved resize pivot. Use a calibrated item at 100%. Copies rotate, resize, then move above the source.",
         18, 300, 260)
     UI.Text(self.frame,
-        "Press Start, then hover the source. Keep still while copies are placed, then click each copy in Advanced mode. The source stays in place.",
+        "Start, then hover your source. Keep still while copies are placed. Click copies in Advanced mode; keep the camera still.",
         18, 425, 260)
     UI.Text(self.frame, "Preview uses example tile dimensions; placement uses your saved measurements.", 302, 510, 490)
     self.preview = MHT.Preview.New(self.frame)
+    self.preview.frame:SetPoint("TOPLEFT", 302, -120)
+    self.preview.frame:SetHeight(380)
+    MHT.Theme.Skin(self.preview.frame, "deep")
+    UI.Text(self.preview.frame, "Preview", 12, 12, 450)
     self.start = UI.Button(self.frame, "Start test", 18, 525, 95, start)
     self.finish = UI.Button(self.frame, "End", 121, 525, 95, finish)
     self.progress = UI.Text(self.frame, "", 227, 532, 70)
@@ -62,7 +66,7 @@ function Panel:Preview()
         -- Example tile proportions; placement refits to the saved item size.
         self.plan, self.reason = MHT.Layout.Solids[self.case.shape].Build(percent / 100, { 2, 2, 0.25 })
     end
-    self.preview:SetPlan(self.plan, self.case.shape)
+    self.preview:SetPlan(self.plan)
 end
 
 function Panel:Prepare()

@@ -26,6 +26,10 @@ function Panel.New(parent, controller, settings, copySettings, start, finish, no
     self.finish = UI.Button(self.frame, "End", 121, 525, 95, finish)
     self.progress = UI.Text(self.frame, "", 227, 532, 70)
     self.preview = MHT.Preview.New(self.frame)
+    self.preview.frame:SetPoint("TOPLEFT", 302, -120)
+    self.preview.frame:SetHeight(380)
+    MHT.Theme.Skin(self.preview.frame, "deep")
+    UI.Text(self.preview.frame, "Preview", 12, 12, 450)
     self:Preview()
     self:Refresh(false)
     return self
@@ -43,7 +47,7 @@ function Panel:Preview()
             { x = 2 * scale, y = 2 * scale, z = lift + height * scale, rotation = identity, scale = scale },
         } }
     end
-    self.preview:SetPlan(plan, "resize_test")
+    self.preview:SetPlan(plan)
 end
 
 function Panel:Refresh(blocked)
