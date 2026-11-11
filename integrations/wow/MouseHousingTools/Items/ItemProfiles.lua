@@ -73,8 +73,8 @@ end
 local FOOTPRINT = { { "near-left", -1, -1 }, { "far-left", -1, 1 }, { "far-right", 1, 1 }, { "near-right", 1, -1 } }
 
 -- The outline of an item with `profile.dimensions` and `profile.shape`, in its
--- own axes at 100% size: vertices, and edges as pairs of vertex indices. Nil
--- when the size isn't known.
+-- own axes at 100% size: vertices, edges as pairs of vertex indices, and faces
+-- wound counterclockwise seen from outside. Nil when the size isn't known.
 function ItemProfiles.Outline(profile)
     local d = profile and profile.dimensions
     if not d then return nil end
@@ -89,11 +89,16 @@ function ItemProfiles.Outline(profile)
     for _, z in ipairs({ -d[3] / 2, d[3] / 2 }) do
         for _, p in ipairs(footprint) do vertices[#vertices + 1] = { x = p[1], y = p[2], z = z } end
     end
+    -- The footprint runs clockwise seen from above.
+    local bottom, top, faces = {}, {}, {}
     for i = 1, n do
         local j = i % n + 1
         edges[#edges + 1] = { i, j }
         edges[#edges + 1] = { n + i, n + j }
         edges[#edges + 1] = { i, n + i }
+        bottom[i], top[i] = i, 2 * n + 1 - i
+        faces[#faces + 1] = { i, n + i, n + j, j }
     end
-    return vertices, edges
+    faces[#faces + 1], faces[#faces + 2] = bottom, top
+    return vertices, edges, faces
 end
