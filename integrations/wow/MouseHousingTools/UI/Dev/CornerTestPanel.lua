@@ -9,7 +9,7 @@ function Panel.New(parent, api, measurements, start, notify)
     self.frame = CreateFrame("Frame", nil, parent)
     self.frame:SetAllPoints(parent)
     UI.Text(self.frame, "Corner rotation tests", 18, 105, 740, "GameFontNormalLarge")
-    UI.Text(self.frame,
+    UI.Muted(self.frame,
         "Place the tile at 100% size in its calibrated starting pose. Put the four markers at its corners, roughly halfway up its thickness. Finish editing, run a named test, then click the tile. After it turns, click corners 1 → 2 → 3 → 4. Markers only move.",
         18, 140, 760)
     self.layout = UI.Text(self.frame, "", 18, 195, 760)
@@ -30,7 +30,7 @@ function Panel.New(parent, api, measurements, start, notify)
     end
     self.run = UI.Button(self.frame, "Run test_x", 18, 520, 170, function() start(self.chosen) end)
     self.stop = UI.Button(self.frame, "End", 196, 520, 100, function() self.controller:Abort() end)
-    UI.Text(self.frame, "Results stay in game for screenshots. Restore the starting layout before each case. Calibration values stay unchanged.", 315, 515, 465)
+    UI.Muted(self.frame, "Results stay in game for screenshots. Restore the starting layout before each case. Calibration values stay unchanged.", 315, 515, 465)
     self.controller = MHT.CornerTest.New(api, measurements, function(message, completed, total)
         self.message = message
         notify(message, completed, total)

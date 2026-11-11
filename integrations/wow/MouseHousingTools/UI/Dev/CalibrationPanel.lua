@@ -27,9 +27,9 @@ function CalibrationPanel.New(parent, api, capture, settings, start, notify, tes
     self.workflow = UI.Check(body, "Move copies aside", 18, 180,
         settings.workflow == "aside", function(checked) settings.workflow = checked and "aside" or "double"; self:Refresh() end)
     self.guide = UI.Text(body, "", 18, 220, 740)
-    self.item = UI.Text(body, "No item measured yet.", 18, 285, 740)
+    self.item = UI.Muted(body, "No item measured yet.", 18, 274, 740)
     UI.Text(body, "Measured / saved result", 55, 302, 450)
-    self.trialHeading = UI.Text(body, "Trial pivot (movement units)", 555, 302, 220)
+    self.trialHeading = UI.Text(body, "Trial pivot (movement units)", 550, 302, 240)
     for i, axis in ipairs({ "x", "y", "z" }) do
         UI.Text(body, axis:upper(), 18, 322 + (i - 1) * 34, 30)
         self.values[axis] = UI.Text(body, "", 55, 322 + (i - 1) * 34, 480)
@@ -37,6 +37,7 @@ function CalibrationPanel.New(parent, api, capture, settings, start, notify, tes
         edit:SetPoint("TOPLEFT", 560, -316 - (i - 1) * 34)
         edit:SetSize(155, 22)
         edit:SetAutoFocus(false)
+        UI.StyleInput(edit, 155, 26)
         edit:SetMaxLetters(20)
         edit:SetScript("OnEnterPressed", function()
             if self:ReadTrialInputs() then edit:ClearFocus() end
@@ -192,12 +193,13 @@ function CalibrationPanel:Refresh()
     local c, s = self.controller, self.settings
     local busy = self:Busy()
     local locked = self.blocked or busy
-    self.pivot:SetEnabled(not locked and s.kind ~= "pivot")
-    self.size:SetEnabled(not locked and s.kind ~= "size")
-    self.rotationAxes:SetEnabled(not locked and s.kind ~= "axes")
-    self.resizePivot:SetEnabled(not locked and s.kind ~= "resize")
+    for kind, button in pairs({ pivot = self.pivot, size = self.size, axes = self.rotationAxes, resize = self.resizePivot }) do
+        button:SetEnabled(not locked)
+        button:SetSelected(s.kind == kind)
+    end
     for axis, button in pairs(self.axes) do
-        button:SetEnabled(not locked and s.axis ~= axis)
+        button:SetEnabled(not locked)
+        button:SetSelected(s.axis == axis)
         button:SetShown(s.kind ~= "resize")
     end
     local axes = s.kind == "axes"

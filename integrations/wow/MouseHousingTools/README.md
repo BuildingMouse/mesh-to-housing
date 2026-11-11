@@ -12,11 +12,11 @@ a set of decor items.
 | Folder | What it holds | WoW-specific? |
 |---|---|---|
 | `Geometry/` | The plan definition (`Plan.lua`: which items go where, relative to the source item) and orientations as rotation matrices (`Rotation.lua`) | No |
-| `Shapes/` | Presets that produce plans: stairs, circles | No |
+| `Shapes/` | Presets that produce plans. Each shape file (stairs, circle) registers itself with `Layout.lua`, which turns any shape's settings into a plan. Saved models are in `ModelLibrary.lua` (for now only the test sphere) | No |
 | `Items/` | What we know about decor items: logged and calibrated pivots, ring directions and sizes. `ItemProfiles.lua` defines a profile's fields and reads them; `ItemCatalog.lua` holds the logged profiles | Yes |
 | `Placement/` | How WoW gets an item to its place: editor calls (`Housing.lua`), turning a plan item into editor moves (`NativeEdit.lua`), timed key holds (`Motion.lua`), and the whole build (`Placement.lua`) | Yes |
 | `Dev/` | Calibration and test logic, including test figures in `Dev/Figures/`. | Yes |
-| `UI/` | Everything drawn on screen; dev panels are in `UI/Dev/` | Yes |
+| `UI/` | Everything drawn on screen. Building blocks: `Theme.lua` (the look: colors, fonts, skins, icons, logo), `UI.lua` (widgets), `Preview.lua`. The main window: `Window.lua`, its settings column `SettingsPanel.lua` and `Footer.lua`. `UI/Tabs/` holds each tab's settings: Shapes, 3D Sketch and 3D Sculpt, with the shared `ModelPicker.lua`. `UI/Editor/` holds what goes into Blizzard's housing editor: the launcher button and `EditorChrome.lua`, which adjusts the editor's own UI. Dev tools open in their own window (`UI/Dev/DeveloperWindow.lua`) when `MHT.DEV_MODE` is on at the top of `Init.lua` | Yes |
 
 ## What the housing editor allows
 
