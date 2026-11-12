@@ -2,6 +2,7 @@ local _, MHT = ...
 local Motion = {}
 Motion.__index = Motion
 MHT.Motion = Motion
+local copy = MHT.Util.Copy
 
 -- Moves the selected item by holding the editor's keys for timed durations.
 
@@ -68,7 +69,33 @@ end
 function Motion:Begin(queue, guid, done, onPhase)
     self:Stop()
     self.queue, self.guid, self.done, self.onPhase = queue, guid, done, onPhase
-    self.submode = nil
+    self.submode, self.rotationAxis = nil, nil
+end
+
+function Motion:Checkpoint()
+    if not self.queue then return nil end
+    local queue = {}
+    if self.submode then
+        local first = Motion.StandardProfile.firstRotationAxis
+        queue[1] = { mode = self.submode, label = "Resuming", controls = {},
+            reset = self.phase and self.phase.reset and not self.phase.resetDone or nil,
+            cycles = self.submode == "Rotate" and self.rotationAxis and (self.rotationAxis - first) % 3 + 1 or 0 }
+    end
+    if self.phase then
+        local controls = {}
+        if not self.phase.started then
+            controls = copy(self.phase.controls)
+        else
+            for name, remaining in pairs(self.active) do controls[#controls + 1] = { name = name, duration = remaining } end
+        end
+        if #controls > 0 then queue[#queue + 1] = { label = self.phase.label or "Resuming", controls = controls } end
+    end
+    for _, phase in ipairs(self.queue) do queue[#queue + 1] = copy(phase) end
+    return queue
+end
+
+function Motion:Resume(checkpoint, guid, done, onPhase)
+    self:Begin(copy(checkpoint), guid, done, onPhase)
 end
 
 function Motion:Stop()
@@ -109,6 +136,7 @@ function Motion:Update(elapsed)
         end
         if self.phase.mode then
             self.submode = self.phase.mode
+            if self.submode == "Rotate" then self.rotationAxis = nil end
             self.api:PrepareSubmode(self.phase.mode)
             if not self.queue then return end
         end
@@ -125,6 +153,7 @@ function Motion:Update(elapsed)
         end
         self.phase.setup = nil
         for _ = 1, self.phase.cycles or 0 do
+            self.rotationAxis = self.rotationAxis and self.rotationAxis % 3 + 1 or Motion.StandardProfile.firstRotationAxis
             self.api:CycleRotationAxis()
             if not self.queue then return end
         end
