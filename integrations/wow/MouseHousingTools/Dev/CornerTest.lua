@@ -74,7 +74,7 @@ function Test:BeginTile(selected)
     for i, corner in ipairs(Test.Corners) do
         points[i] = { x = corner.x * dimensions[1] / 2, y = corner.y * dimensions[2] / 2, z = 0 }
     end
-    local expected, center = MHT.NativeEdit.TurnedPoints(points, self.case.rotation, item)
+    local expected, center = MHT.Maneuver.TurnedPoints(points, self.case.rotation, item)
     self.predictions = {}
     for i, point in ipairs(points) do
         local shift = {}

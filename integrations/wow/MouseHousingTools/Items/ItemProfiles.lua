@@ -41,7 +41,7 @@ function ItemProfiles.AsideStep(decorID)
     return { x = step.x or 0, y = step.y or 0, z = step.z or 0 }
 end
 
--- Everything NativeEdit needs to place the item.
+-- Everything Maneuver needs to place the item.
 function ItemProfiles.Calibration(decorID)
     local logged = ItemProfiles.Logged(decorID)
     local pivots = {}
