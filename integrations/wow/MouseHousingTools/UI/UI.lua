@@ -219,15 +219,6 @@ function UI.NumberBox(parent, x, y, width, value, onChange, limits)
     return edit
 end
 
--- A captioned number field.
-function UI.Number(parent, label, x, y, value, onChange, limits)
-    local caption = UI.Text(parent, label, x, y, 230)
-    local edit = UI.NumberBox(parent, x, y + 20, 105, value, onChange, limits)
-    edit:SetJustifyH("LEFT")
-    edit.label = caption
-    return edit
-end
-
 local function scrollParent(frame)
     local parent = frame:GetParent()
     while parent do

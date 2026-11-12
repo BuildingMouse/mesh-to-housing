@@ -4,19 +4,28 @@ local API = MHT.Housing
 -- Editor calls only the dev tools use. Calibration copies use two colors, so
 -- the copies can be told apart.
 
+local function anyColorStock(api, source, count)
+    local entry, stored = api:Stored(source)
+    if not entry then return nil, stored end
+    local total = 0
+    for _, variant in ipairs(stored) do total = total + variant.numStored end
+    if total < count then return nil, string.format("%d copies in storage; %d needed.", total, count) end
+    return stored
+end
+
 function API:CalibrationCopies(source)
-    local stock, reason = self:CheckStock(source, 2, true)
-    if not stock then return nil, reason end
-    local first, second = stock.storedVariants[1]
+    local stored, reason = anyColorStock(self, source, 2)
+    if not stored then return nil, reason end
+    local first, second = stored[1]
     local signature = API.DyeKey(source.dyeSlots)
-    for _, variant in ipairs(stock.storedVariants) do
+    for _, variant in ipairs(stored) do
         if API.DyeKey(variant.dyeSlots) == signature then first = variant; break end
     end
-    for _, variant in ipairs(stock.storedVariants) do
+    for _, variant in ipairs(stored) do
         if API.DyeKey(variant.dyeSlots) ~= API.DyeKey(first.dyeSlots) then second = variant; break end
     end
     if not second then
-        for _, variant in ipairs(stock.storedVariants) do
+        for _, variant in ipairs(stored) do
             if variant ~= first or variant.numStored > 1 then second = variant; break end
         end
     end
@@ -24,11 +33,15 @@ function API:CalibrationCopies(source)
 end
 
 function API:BeginColorCopy(source, remaining, variantID)
-    local stock, reason = self:CheckStock(source, remaining, true)
-    if not stock then error(reason) end
+    local stored, reason = anyColorStock(self, source, remaining)
+    if not stored then error(reason) end
     local variant = C_HousingCatalog.GetCatalogEntryVariantInfo(variantID)
     if not variant or variant.numStored < 1 then error("The chosen calibration color is no longer in storage.") end
     C_HousingBasicMode.StartPlacingNewDecor(variantID)
+end
+
+function API:PrecisionSubmode()
+    return C_HousingExpertMode.GetPrecisionSubmode()
 end
 
 function API:MovementBindings()

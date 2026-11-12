@@ -11,7 +11,7 @@ local PHASE_WAIT = 0.08
 Motion.StandardProfile = { right = 1, forward = 1, up = 1, grow = 0.2, shrink = 0.2,
                            rotate = 45, firstRotationAxis = 1 }
 
-local function phases(edit, profile, resetScale)
+function Motion.Phases(edit, profile)
     local move = {}
     for _, axis in ipairs({ { "x", "right", "Right", "Left" }, { "y", "forward", "Forward", "Back" },
                             { "z", "up", "Up", "Down" } }) do
@@ -28,7 +28,7 @@ local function phases(edit, profile, resetScale)
             controls[1] = { name = growing and "ScaleUp" or "ScaleDown",
                             duration = math.abs(edit.scale - 1) / profile[growing and "grow" or "shrink"] }
         end
-        resizing = { mode = "Scale", label = "Resizing", reset = resetScale, controls = controls }
+        resizing = { mode = "Scale", label = "Resizing", reset = true, controls = controls }
     end
     local result = { translation }
     if resizing then result[2] = resizing end
@@ -53,24 +53,12 @@ local function phases(edit, profile, resetScale)
     return result
 end
 
-function Motion.PlanMove(target, item, profile)
-    return phases(MHT.NativeEdit.For(target, item), profile or Motion.StandardProfile, true)
-end
-
-function Motion.PlanEdit(edit, profile)
-    return phases(edit, profile or Motion.StandardProfile, false)
-end
-
 function Motion.New(api)
     return setmetatable({ api = api, active = {} }, Motion)
 end
 
-function Motion:MoveTo(target, item, profile, guid, done, onPhase)
-    self:Begin(Motion.PlanMove(target, item, profile), guid, done, onPhase)
-end
-
-function Motion:Apply(edit, profile, guid, done, onPhase)
-    self:Begin(Motion.PlanEdit(edit, profile), guid, done, onPhase)
+function Motion:MoveTo(target, item, guid, done, onPhase)
+    self:Begin(Motion.Phases(MHT.NativeEdit.For(target, item), Motion.StandardProfile), guid, done, onPhase)
 end
 
 function Motion:Begin(queue, guid, done, onPhase)

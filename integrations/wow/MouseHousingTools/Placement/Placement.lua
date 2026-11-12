@@ -4,9 +4,12 @@ Placement.__index = Placement
 MHT.Placement = Placement
 
 -- Cooldown starts after the game confirms placement.
-local BATCH_COPY_DELAY = 0.2
+local COPY_DELAY = 0.2
 local THROTTLED_COPY_DELAY = 1
 local MAX_COPY_RETRIES = 3
+local SOURCE_HOLD = 1.2
+local CURSOR_TOLERANCE = 2
+local CURSOR_GATES = { basic = true, copy = true, nextcopy = true, throttled = true }
 
 local function resultName(result)
     for name, value in pairs(Enum.HousingResult or {}) do
@@ -15,36 +18,19 @@ local function resultName(result)
     return "Unknown housing error"
 end
 
-Placement.DEFAULT_WORKFLOW = "batch"
-
-local shapeJob = { movingLabel = " selected copy..." }
-
-function shapeJob.Reject(placement, selected)
-    local guid = selected.decorGUID
-    if guid == placement.source.decorGUID then return "That is the source. Click a copy instead." end
-    if selected.decorID and selected.decorID ~= placement.source.decorID then
-        return "That is a different decor item. Click a copy."
-    end
-    if placement.finished[guid] then return "That copy is finished. Click another copy." end
-    if placement.workflow == "repeat" and placement.createdGUID and guid ~= placement.createdGUID then
-        return "Click the copy just created for this target."
-    end
+local function copiesPlaced(count)
+    return string.format("%d %s placed.", count, count == 1 and "copy was" or "copies were")
 end
 
-function shapeJob.Move(placement, target, guid, done, onPhase)
-    local item = MHT.ItemProfiles.Calibration(placement.source.decorID, placement.measurements)
-    placement.motion:MoveTo(target, item, placement.profile, guid, done, onPhase)
+local function endMessage(placement)
+    if placement.stage == "preparing" then return "Preparation stopped." end
+    return string.format("Build ended. %d of %d items placed.", placement.completed, #placement.plan.items)
 end
 
-function shapeJob.Done(placement)
-    return "Done. All " .. placement.completed .. " copies were moved and rotated; source item kept."
-end
-
-function Placement.New(api, notify, measurements)
+function Placement.New(api, notify)
     return setmetatable({
         api = api,
         motion = MHT.Motion.New(api),
-        measurements = measurements,
         notify = notify,
         state = "idle",
         completed = 0,
@@ -52,7 +38,16 @@ function Placement.New(api, notify, measurements)
 end
 
 function Placement:Busy()
-    return self.state ~= "idle"
+    return self.state ~= "idle" and self.state ~= "ready"
+end
+
+-- A build session runs from Prepare until the build ends.
+function Placement:HasSession()
+    return self.stage ~= nil
+end
+
+function Placement:Ready()
+    return self.state == "ready"
 end
 
 function Placement:SetState(state, message)
@@ -63,8 +58,16 @@ function Placement:SetState(state, message)
     end
 end
 
-function Placement:Start(plan, profile, workflow)
-    if self:Busy() then return end
+function Placement:Prepare(plan)
+    return self:Start(plan, "preparing")
+end
+
+function Placement:BuildFromPile(plan)
+    return self:Start(plan, "building")
+end
+
+function Placement:Start(plan, stage)
+    if self:Busy() or self:HasSession() then return nil, "End the current build first." end
     if not self.api:Available() then
         return nil, "Placement needs Retail housing catalog variants (12.0.5+)."
     end
@@ -78,59 +81,62 @@ function Placement:Start(plan, profile, workflow)
         return nil, "This plan uses more than one item; building supports one item for now."
     end
 
-    workflow = workflow or Placement.DEFAULT_WORKFLOW
-    if workflow ~= "repeat" and workflow ~= "batch" then
-        return nil, "Unknown placement workflow."
-    end
-
     self.plan = plan
-    self.profile = profile
-    self.workflow = workflow
-    self.job = shapeJob
+    self.stage = stage
+    self.fromPile = stage == "building"
 
     self.copiesCreated = 0
-    self.copyDelay, self.copyRetries, self.retryDelay = BATCH_COPY_DELAY, 0, nil
+    self.copyDelay, self.copyRetries, self.retryDelay = COPY_DELAY, 0, nil
 
     self.completed = 0
 
     self.source = nil
     self.cursor = nil
+    self.cursorAway, self.returnHold = false, nil
+    self.modeRequest = nil
     self.hoverGUID = nil
     self.hoverX = nil
     self.hoverY = nil
     self.still = 0
 
     self.activeGUID = nil
-    self.activeIndex = nil
-    self.createdGUID = nil
     self.finished = {}
     self.lastRejectedGUID = nil
 
     self.saved = self.api:SaveSettings()
 
-    self:SetState(
-        "arming",
-        workflow == "batch"
-            and "Hover over the source and keep the mouse still. All copies will be created first."
-            or "Hover over the source and keep the mouse still. Each copy will be placed, then moved."
-    )
+    if self.fromPile then
+        self.api:UsePlacementSettings()
+        self:BeginSelectionPhase()
+    else
+        self:SetState("arming", "Hover the item to copy and hold the cursor still.")
+    end
     return true
 end
 
-function Placement:StartSelecting(plan, profile, job, message)
-    if self:Busy() then return end
-    self.plan, self.profile, self.job, self.workflow = plan, profile, job, nil
-    self.completed = 0
-    self.finished = {}
-    self.saved, self.source, self.cursor = nil, nil, nil
-    self.activeGUID, self.activeIndex = nil, nil
-    self.lastRejectedGUID = nil
-    self:SetState("select", message)
+function Placement:Build()
+    if not self:Ready() then return nil, "Prepare items or use an existing pile first." end
+    if not self.api:Active() then return nil, "Open the housing editor first." end
+    if self.api:IsSelected() then return nil, "Finish editing the selected item first." end
+    self.stage = "building"
+    self.saved = self.api:SaveSettings()
+    self.api:UsePlacementSettings()
+    self:BeginSelectionPhase()
+    return true
+end
+
+function Placement:UseSource(item)
+    local required = self.plan.requires
+    if required and item.decorID ~= required then
+        local name = MHT.ItemProfiles.Logged(required).name or ("decor item " .. required)
+        return nil, "Use " .. name .. " for this model."
+    end
+    self.source = item
     return true
 end
 
 function Placement:Abort(message)
-    if not self:Busy() then
+    if not self:Busy() and not self:HasSession() then
         if message then
             self.notify(message, self.completed, self.plan and #self.plan.items or 0)
         end
@@ -158,27 +164,60 @@ function Placement:Abort(message)
         pcall(self.api.Cancel, self.api)
     end
 
-    pcall(self.api.RestoreSettings, self.api, self.saved)
+    if self.saved then pcall(self.api.RestoreSettings, self.api, self.saved) end
+
+    message = message or endMessage(self)
+    if self.stage == "preparing" then message = message .. " " .. copiesPlaced(self.copiesCreated) end
 
     self.saved = nil
     self.cursor = nil
+    self.cursorAway, self.returnHold = false, nil
     self.activeGUID = nil
-    self.activeIndex = nil
-    self.createdGUID = nil
+    self.stage = nil
 
-    self:SetState("idle", message or "Aborted. Finished items remain placed.")
+    self:SetState("idle", message)
 end
 
-function Placement:CursorStill()
-    if not self.cursor then return true end
-
+-- A copy goes wherever the cursor points, so copying waits while the cursor is off
+-- its spot. Once back, it must hold still there, like the first hover.
+function Placement:CursorReady(elapsed)
     local x, y = GetCursorPosition()
-    if math.abs(x - self.cursor.x) + math.abs(y - self.cursor.y) > 8 then
-        self:Abort("Mouse moved while copies were being created. Placement stopped.")
-        return false
+    local wasAway, wasHolding = self.cursorAway, self.returnHold ~= nil
+    if math.abs(x - self.cursor.x) + math.abs(y - self.cursor.y) > CURSOR_TOLERANCE then
+        if self.state == "copy" and self.api:HasPendingCopy() then
+            -- The pending copy follows the cursor; cancel it before it lands elsewhere.
+            pcall(self.api.Cancel, self.api)
+            self.state = "basic"
+        end
+        self.cursorAway, self.returnHold = true, nil
+    elseif self.cursorAway then
+        self.returnHold = (self.returnHold or 0) + elapsed
+        if self.returnHold >= SOURCE_HOLD then self.cursorAway, self.returnHold = false, nil end
     end
 
+    if wasAway ~= self.cursorAway or wasHolding ~= (self.returnHold ~= nil) then
+        self.notify(self.returnHold and "Hold the cursor still to continue."
+            or self.cursorAway and "Cursor moved. Put it back where it was to continue."
+            or "Keep the cursor still while copies are placed.", self.completed, #self.plan.items)
+    end
+    if self.cursorAway and CURSOR_GATES[self.state] then
+        self.age = 0
+        return false
+    end
     return true
+end
+
+-- Switches once and waits; asks again if the player leaves the mode later.
+function Placement:EnsureMode(mode)
+    if self.api:Mode() == Enum.HouseEditorMode[mode] then
+        self.modeRequest = nil
+        return true
+    end
+    if self.modeRequest ~= mode then
+        self.modeRequest = mode
+        self.api:Switch(mode)
+    end
+    return false
 end
 
 function Placement:BeginCopy()
@@ -186,24 +225,26 @@ function Placement:BeginCopy()
 
     self:SetState(
         "copy",
-        string.format("Creating copy %d / %d. Keep the mouse still...", copyIndex, #self.plan.items)
+        string.format("Creating copy %d / %d. Keep the cursor still...", copyIndex, #self.plan.items)
     )
-    self.createdGUID = nil
 
     -- Keep using the captured source when copies overlap it.
     self.api:BeginCopy(self.source, #self.plan.items - self.copiesCreated)
 end
 
 function Placement:BeginBasic()
-    self:SetState("basic", "Preparing copies. Keep the mouse still...")
-    self.api:Switch("BasicDecor")
+    self:SetState("basic", "Preparing copies. Keep the cursor still...")
+    self:EnsureMode("BasicDecor")
 end
 
-function Placement:ReturnToSource()
+function Placement:PileReady()
     self.cursor = nil
-    self.hoverGUID, self.hoverX, self.hoverY, self.still = nil, nil, nil, 0
-    self:SetState("returnsource", "Returning to Basic mode. Hover over the original source for the next copy.")
-    self.api:Switch("BasicDecor")
+    self.cursorAway, self.returnHold = false, nil
+    pcall(self.api.RestoreSettings, self.api, self.saved)
+    self.saved = nil
+    self.stage = "ready"
+    self:SetState("ready", string.format(
+        "%d copies ready. Press Build, then click the pile's copies one at a time.", #self.plan.items))
 end
 
 function Placement:BeginSelectionPhase()
@@ -211,21 +252,32 @@ function Placement:BeginSelectionPhase()
     self.hoverGUID = nil
     self.lastRejectedGUID = nil
 
-    self:SetState(
-        "expert",
-        self.workflow == "batch" and string.format(
-            "%d copies created. Switching to Advanced mode; click the stacked copies one at a time.",
-            self.copiesCreated
-        ) or "Copy placed. Switching to Advanced mode; click the new copy to move it."
-    )
+    self:SetState("expert", "Switching to Advanced mode...")
     self.api:Switch("ExpertDecor")
+end
+
+function Placement:RejectReason(selected)
+    if selected.isLocked then return "Someone else is editing that item. Click another copy." end
+    if not self.source then
+        -- An existing pile has no source to keep: the first copy clicked sets the item.
+        local ok, reason = self:UseSource(selected)
+        if not ok then return reason end
+    end
+    local guid = selected.decorGUID
+    if guid == self.source.decorGUID and not self.fromPile then
+        return "That is the source. Click a copy instead."
+    end
+    if selected.decorID and selected.decorID ~= self.source.decorID then
+        return "That is a different decor item. Click a copy."
+    end
+    if self.finished[guid] then return "That copy is finished. Click another copy." end
 end
 
 function Placement:HandleSelectedCopy(selected)
     local guid = selected.decorGUID
     if not guid then return end
 
-    local reason = self.job.Reject(self, selected)
+    local reason = self:RejectReason(selected)
     if reason then
         if self.lastRejectedGUID ~= guid then
             self.lastRejectedGUID = guid
@@ -237,14 +289,14 @@ function Placement:HandleSelectedCopy(selected)
     self.lastRejectedGUID = nil
     self.activeGUID = guid
 
-    self.activeIndex = self.completed + 1
-    local target = self.plan.items[self.activeIndex]
+    local index = self.completed + 1
+    local target = self.plan.items[index]
 
     self:SetState(
         "moving",
         string.format(
             "Moving selected copy to target %d / %d...",
-            self.activeIndex,
+            index,
             #self.plan.items
         )
     )
@@ -254,9 +306,10 @@ function Placement:HandleSelectedCopy(selected)
         self.api:Commit()
     end
     local function onPhase(label)
-        self:SetState("moving", label .. self.job.movingLabel .. (target.label and (" " .. target.label) or ""))
+        self:SetState("moving", label .. " selected copy..." .. (target.label and (" " .. target.label) or ""))
     end
-    self.job.Move(self, target, guid, done, onPhase)
+    local item = MHT.ItemProfiles.Calibration(self.source.decorID)
+    self.motion:MoveTo(target, item, guid, done, onPhase)
 end
 
 function Placement:Update(elapsed)
@@ -269,12 +322,11 @@ function Placement:Update(elapsed)
 
     self.age = self.age + elapsed
 
-    if self.state == "arming" or self.state == "source" then
+    if self.state == "arming" then
         local hovered = self.api:Hovered()
         local x, y = GetCursorPosition()
 
-        if not hovered or not hovered.decorGUID
-            or (self.state == "source" and hovered.decorGUID ~= self.source.decorGUID) then
+        if not hovered or hovered.isLocked or not hovered.decorGUID then
             self.hoverGUID = nil
             self.still = 0
             return
@@ -290,51 +342,27 @@ function Placement:Update(elapsed)
         end
 
         self.still = self.still + elapsed
-        if self.still < 1.2 then return end
+        if self.still < SOURCE_HOLD then return end
 
-        if self.state == "arming" then
-            local required = self.plan.requires
-            if required and hovered.decorID ~= required then
-                local name = MHT.ItemProfiles.Logged(required).name or ("decor item " .. required)
-                self:Abort("Use " .. name .. " for this model.")
-                return
-            end
-            if self.plan.fit then
-                -- Fitted plans are rebuilt for the real item's size.
-                local dimensions, reason = MHT.ItemProfiles.Dimensions(hovered.decorID, self.measurements)
-                if not dimensions then self:Abort(reason); return end
-                local plan
-                plan, reason = self.plan.fit(dimensions)
-                if not plan then self:Abort(reason); return end
-                self.plan = plan
-            end
-            local stock, reason = self.api:CheckStock(hovered, #self.plan.items)
-            if not stock then self:Abort(reason); return end
-            self.source = hovered
-            self.notify(string.format("%s: %d matching copies; %d needed.",
-                stock.name, stock.count, #self.plan.items), 0, #self.plan.items)
-            self.api:UsePlacementSettings()
-        end
+        local ok, reason = self:UseSource(hovered)
+        if ok then ok, reason = self.api:CheckStock(hovered, #self.plan.items) end
+        if not ok then self:Abort(reason); return end
+        self.api:UsePlacementSettings()
         self.cursor = { x = x, y = y }
         self:BeginBasic()
         return
     end
 
-    if self.cursor and not self:CursorStill() then return end
+    if self.cursor and not self:CursorReady(elapsed) then return end
 
     if self.state == "basic" then
-        if self.api:Mode() == Enum.HouseEditorMode.BasicDecor then
+        if self:EnsureMode("BasicDecor") then
             self:BeginCopy()
-        end
-
-    elseif self.state == "returnsource" then
-        if self.api:Mode() == Enum.HouseEditorMode.BasicDecor then
-            self:SetState("source", "Hover over the original source and hold still for the next copy.")
         end
 
     elseif self.state == "nextcopy" then
         if self.age >= self.copyDelay
-            and self.api:Mode() == Enum.HouseEditorMode.BasicDecor
+            and self:EnsureMode("BasicDecor")
             and not self.api:HasPendingCopy() then
             self:BeginCopy()
         end
@@ -357,7 +385,10 @@ function Placement:Update(elapsed)
         end
 
     elseif self.state == "copy" then
-        if self.api:HasPendingCopy() then
+        if self.api:Mode() ~= Enum.HouseEditorMode.BasicDecor then
+            -- Leaving Basic mode drops the pending copy; start it again.
+            self.state = "basic"
+        elseif self.api:HasPendingCopy() then
             local pending = self.api:PendingInfo()
 
             if pending and (not pending.decorID or pending.decorID == self.source.decorID) then
@@ -368,12 +399,8 @@ function Placement:Update(elapsed)
 
     elseif self.state == "expert" then
         if self.api:Mode() == Enum.HouseEditorMode.ExpertDecor then
-            self:SetState(
-                "select",
-                self.workflow == "batch"
-                    and "Mouse movement is allowed now. Click one stacked copy; after it moves, click the next."
-                    or "Click the new copy to move it. Then hover over the original source to repeat."
-            )
+            self:SetState("select", string.format(
+                "Click the copies in the pile one at a time (1 / %d). Keep the camera still.", #self.plan.items))
         end
 
     elseif self.state == "select" then
@@ -396,12 +423,14 @@ function Placement:Update(elapsed)
         self.motion:Update(elapsed)
     end
 
-    if self.state ~= "select" and self.state ~= "source" and self.state ~= "moving" and self.age > 10 then
+    if self.state ~= "select" and self.state ~= "moving" and self.age > 10 then
         self:Abort("The game did not confirm the last action. Placement stopped.")
     end
 end
 
 function Placement:OnEvent(event, ...)
+    -- Any finished mode change, the player's too, lets EnsureMode ask again.
+    if event == "HOUSE_EDITOR_MODE_CHANGED" then self.modeRequest = nil end
     if not self:Busy() then return end
 
     if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_LEAVING_WORLD" then
@@ -420,7 +449,7 @@ function Placement:OnEvent(event, ...)
                 if self.copyRetries <= MAX_COPY_RETRIES then
                     self.copyDelay, self.retryDelay = THROTTLED_COPY_DELAY, 2 ^ self.copyRetries
                     self:SetState("throttled", string.format(
-                        "WoW's housing request limit reached. Waiting %d seconds before retrying copy %d / %d. Keep the mouse still.",
+                        "WoW's housing request limit reached. Waiting %d seconds before retrying copy %d / %d. Keep the cursor still.",
                         self.retryDelay, self.copiesCreated + 1, #self.plan.items))
                     return
                 end
@@ -442,48 +471,33 @@ function Placement:OnEvent(event, ...)
     if (self.state == "placing" or self.state == "throttled") and isNew then
         self.copiesCreated = self.copiesCreated + 1
         self.copyRetries, self.retryDelay = 0, nil
-        self.createdGUID = guid
 
-        if self.workflow == "repeat" then
-            self:BeginSelectionPhase()
-        elseif self.copiesCreated < #self.plan.items then
+        if self.copiesCreated < #self.plan.items then
             self:SetState(
                 "nextcopy",
                 string.format(
-                    "Created copy %d / %d. Waiting %.2fs before the next copy...",
+                    "Created copy %d / %d. Keep the cursor still...",
                     self.copiesCreated,
-                    #self.plan.items,
-                    self.copyDelay
+                    #self.plan.items
                 )
             )
         else
-            self:BeginSelectionPhase()
+            self:PileReady()
         end
         return
     end
 
     if self.state == "committing" and not isNew then
         if guid and guid ~= self.activeGUID then return end
-        local committedGUID = self.activeGUID
-
-        self.finished[committedGUID] = true
+        self.finished[self.activeGUID] = true
         self.completed = self.completed + 1
         self.activeGUID = nil
-        self.activeIndex = nil
 
         if self.completed == #self.plan.items then
-            self:Abort(self.job.Done(self))
-        elseif self.workflow == "repeat" then
-            self:ReturnToSource()
+            self:Abort("Build complete. All " .. self.completed .. " items were placed.")
         else
-            self:SetState(
-                "select",
-                string.format(
-                    "%d / %d finished. Click another stacked copy.",
-                    self.completed,
-                    #self.plan.items
-                )
-            )
+            self:SetState("select", string.format(
+                "Click the next copy in the pile (%d / %d).", self.completed + 1, #self.plan.items))
         end
     end
 end

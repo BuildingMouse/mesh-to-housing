@@ -40,7 +40,7 @@ function SketchPanel:Plan()
     if not entry then return nil, reason end
     local settings = self.settings
     return MHT.ModelLibrary.Sketch(entry.id, settings.percent / 100, settings.itemPercent / 100,
-        (self.window:ItemDimensions(entry.decorID)))
+        (MHT.ItemProfiles.Dimensions(entry.decorID)))
 end
 
 function SketchPanel:Reset()

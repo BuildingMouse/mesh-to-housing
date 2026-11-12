@@ -128,7 +128,7 @@ end
 
 function ShapePanel:Plan()
     local window = self.window
-    local dimensions, reason = window:ItemDimensions(MHT.ItemProfiles.DEFAULT_DECOR_ID)
+    local dimensions, reason = MHT.ItemProfiles.Dimensions(MHT.ItemProfiles.DEFAULT_DECOR_ID)
     if not dimensions then return nil, reason end
     return MHT.Layout.Build(window.settings, dimensions)
 end

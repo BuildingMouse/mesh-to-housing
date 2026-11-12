@@ -106,6 +106,7 @@ function Calibration:SavePivot(axis)
     self.measurements[draft.decorID] = item
     item.name, item.pivot[draft.axis] = draft.name, result
     draft.measurement = copy(result)
+    MHT.ItemProfiles.UseSaved(self.measurements)
     self:SetState("done", "Pivot saved. Shapes now use these values for this item and rotation axis.")
     return true
 end
@@ -179,6 +180,7 @@ function Calibration:SaveSize(axis)
         draft.measurements[coordinate] = copy(result)
     end
     item.name = draft.name
+    MHT.ItemProfiles.UseSaved(self.measurements)
     self.kind, self.axis = "size", axis
     self:SetState("done", "Size saved for this item.")
     return true
@@ -269,7 +271,7 @@ function Calibration:MoveAside(selected)
     local guid = selected.decorGUID
     if first then self.asideGUID = guid else self.testGUID = guid end
     if not self.asideShift then
-        local dimensions = MHT.ItemProfiles.Dimensions(self.source.decorID, self.measurements)
+        local dimensions = MHT.ItemProfiles.Dimensions(self.source.decorID)
         self.asideShift = { x = math.max(4, dimensions and dimensions[1] * 1.5 or 0) }
     end
     self:SetState(first and "shiftingAside" or "matchingAside", first
