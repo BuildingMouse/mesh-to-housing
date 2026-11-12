@@ -32,6 +32,7 @@ function Window.New(settings, uiState)
     self.developer = MHT.DeveloperWindow.New(self)
     self.chrome = MHT.EditorChrome.New()
     self:SelectMode("shapes")
+    self:RestoreBuild()
     self.frame:Hide()
     return self
 end
@@ -88,6 +89,20 @@ function Window:CreatePreview()
     MHT.Theme.Skin(self.preview.frame, nil)
 end
 
+-- A build paused before a /reload comes back paused.
+function Window:RestoreBuild()
+    local saved = self.uiState.buildProgress
+    if not saved then return end
+    if self.tabs[saved.mode] then self:SelectMode(saved.mode) end
+    if not self.placement:RestoreBuild(saved.placement) then self.uiState.buildProgress = nil end
+end
+
+function Window:SaveBuildProgress()
+    local placement = self.placement
+    self.uiState.buildProgress = placement.stage == "building"
+        and { placement = placement:SaveBuild(), mode = self.mode } or nil
+end
+
 function Window:Busy()
     return self.placement:Busy() or self.developer:Busy()
 end
@@ -128,12 +143,13 @@ function Window:UseExistingPile(checked)
     self:Refresh()
 end
 
--- Prepares the pile, or builds from it once it is ready.
+-- Prepares the pile, builds from it once it is ready, and pauses or resumes the build.
 function Window:StartPlacement()
-    if self:Busy() then return end
     local placement = self.placement
+    if placement:CanPause() then placement:Pause(); return end
+    if self:Busy() then return end
     local ok, started, reason
-    if placement:Ready() then
+    if placement:Ready() or placement:Paused() then
         ok, started, reason = pcall(placement.Build, placement)
     else
         self.settingsPanel:CommitEdits()
@@ -149,7 +165,19 @@ end
 -- Ends whatever runs: a dev tool, or a build.
 function Window:EndPlacement(message)
     if self.developer:Stop(message) then return end
+    self.placement:End(message)
+end
+
+-- A build pauses on an error; anything else ends.
+function Window:OnError(message)
+    if self.developer:Stop(message) then return end
     self.placement:Abort(message)
+end
+
+function Window:SkipItem()
+    local ok, skipped, reason = pcall(self.placement.Skip, self.placement)
+    if not ok then self.placement:Abort(MHT.Util.ErrorText(skipped))
+    elseif not skipped then self:SetStatus(reason) end
 end
 
 function Window:SetStatus(message)
@@ -157,6 +185,7 @@ function Window:SetStatus(message)
 end
 
 function Window:OnPlacementMessage(message, completed, total)
+    self:SaveBuildProgress()
     self:SetStatus(message)
     self.developer:OnPlacementMessage(message, completed, total)
     self:UpdateProgress()
@@ -190,7 +219,8 @@ function Window:UpdateControls()
         tab:SetSelected(self.mode == mode)
     end
     if self.developerButton then self.developerButton:SetEnabled(not locked) end
-    local canStart = not busy and (placement:Ready() or not locked and self.plan ~= nil)
+    local canStart = placement:CanPause()
+        or not busy and (placement:Ready() or placement:Paused() or not locked and self.plan ~= nil)
     self.footer:Update(placement, canStart, locked, self.useExistingPile)
 end
 

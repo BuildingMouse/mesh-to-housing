@@ -16,6 +16,9 @@ function Footer.New(window, parent)
     self.pile:SetLabelWidth(150)
     MHT.Theme.Font(self.pile.label, "secondary")
     UI.Tooltip(self.pile, "Use existing pile", "Skip preparation and move each copy you click from the pile.")
+    self.skip = UI.Button(frame, "Skip item", 592, 14, 100, function() window:SkipItem() end, nil, 40)
+    UI.Tooltip(self.skip, "Skip item", "Leave this item where it is and continue with the next one.")
+    self.skip:Hide()
     self.stop = UI.Button(frame, "End", 700, 14, 92, function() window:EndPlacement() end, nil, 40)
     self.start = UI.Button(frame, "Prepare items", 804, 14, 146, function() window:StartPlacement() end, "primary", 40)
     MHT.Theme.Font(self.start.label, "heading")
@@ -33,8 +36,10 @@ end
 
 local function startText(placement, fromPile)
     if placement:Ready() then return "Build" end
+    if placement:Paused() then return "Resume" end
     if placement.stage == "preparing" then return "Preparing…" end
-    if placement.stage == "building" then return "Building…" end
+    if placement.pauseRequested then return "Pausing…" end
+    if placement:CanPause() then return "Pause" end
     if placement:Busy() then return "Placing…" end
     return fromPile and "Build" or "Prepare items"
 end
@@ -52,4 +57,5 @@ function Footer:Update(placement, canStart, running, fromPile)
     self.stop:SetShown(running)
     self.pile:SetChecked(fromPile)
     self.pile:SetShown(not running)
+    self.skip:SetShown(placement:CanSkip())
 end

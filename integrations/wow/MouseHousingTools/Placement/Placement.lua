@@ -7,6 +7,9 @@ MHT.Placement = Placement
 Placement.States = {}
 
 local NO_STATE = {}
+-- WoW undoes an unfinished edit when any of these change.
+local CONTEXT_EVENTS = { HOUSE_EDITOR_MODE_CHANGED = true, HOUSING_EXPERT_MODE_SELECTED_TARGET_CHANGED = true,
+    HOUSING_DECOR_PRECISION_SUBMODE_CHANGED = true }
 
 local function resultName(result)
     for name, value in pairs(Enum.HousingResult or {}) do
@@ -21,7 +24,8 @@ end
 
 local function endMessage(placement)
     if placement.stage == "preparing" then return "Preparation stopped." end
-    return string.format("Build ended. %d of %d items placed.", placement.completed, #placement.plan.items)
+    return string.format("Build ended. %d of %d items placed.",
+        placement.completed - #placement.skipped, #placement.plan.items)
 end
 
 function Placement.New(api, notify)
@@ -35,7 +39,7 @@ function Placement.New(api, notify)
 end
 
 function Placement:Busy()
-    return self.state ~= "idle" and self.state ~= "ready"
+    return self.state ~= "idle" and self.state ~= "ready" and self.state ~= "paused"
 end
 
 -- A build session runs from Prepare until the build ends.
@@ -45,6 +49,10 @@ end
 
 function Placement:Ready()
     return self.state == "ready"
+end
+
+function Placement:Paused()
+    return self.state == "paused"
 end
 
 function Placement:StateInfo()
@@ -86,7 +94,8 @@ function Placement:Start(plan, stage)
     self.plan = plan
     self.stage = stage
     self.fromPile = stage == "building"
-    self.completed = 0
+    self.completed, self.skipped = 0, {}
+    self.interrupted, self.retryFromPile, self.pauseRequested = nil, nil, false
     self.source = nil
     self.modeRequest = nil
     self.activeGUID, self.lastRejectedGUID = nil, nil
@@ -104,17 +113,6 @@ function Placement:Start(plan, stage)
     return true
 end
 
-function Placement:Build()
-    if not self:Ready() then return nil, "Prepare items or use an existing pile first." end
-    if not self.api:Active() then return nil, "Open the housing editor first." end
-    if self.api:IsSelected() then return nil, "Finish editing the selected item first." end
-    self.stage = "building"
-    self.saved = self.api:SaveSettings()
-    self.api:UsePlacementSettings()
-    self:BeginSelectionPhase()
-    return true
-end
-
 function Placement:UseSource(item)
     local required = self.plan.requires
     if required and item.decorID ~= required then
@@ -125,7 +123,18 @@ function Placement:UseSource(item)
     return true
 end
 
+-- Something went wrong: a running build pauses and keeps its progress; anything else ends.
 function Placement:Abort(message)
+    if self.stage ~= "building" then
+        self:End(message)
+    elseif self:Busy() then
+        self:Interrupt(message)
+    elseif message then
+        self.notify(message, self.completed, #self.plan.items)
+    end
+end
+
+function Placement:End(message)
     if not self:Busy() and not self:HasSession() then
         if message then
             self.notify(message, self.completed, self.plan and #self.plan.items or 0)
@@ -152,6 +161,7 @@ function Placement:Abort(message)
     self.cursor = nil
     self.cursorAway, self.returnHold = false, nil
     self.activeGUID = nil
+    self.interrupted, self.retryFromPile, self.pauseRequested = nil, nil, false
     self.stage = nil
 
     self:SetState("idle", message)
@@ -173,6 +183,9 @@ end
 function Placement:Update(elapsed)
     if not self:Busy() then return end
 
+    local watch = self:StateInfo().watch
+    if watch and not watch(self) then return end
+
     if not self.api:Active() then
         self:Abort("Housing editor closed; placement stopped.")
         return
@@ -192,26 +205,37 @@ end
 function Placement:OnEvent(event, ...)
     -- Any finished mode change, the player's too, lets EnsureMode ask again.
     if event == "HOUSE_EDITOR_MODE_CHANGED" then self.modeRequest = nil end
-    if not self:Busy() then return end
+    local info = self:StateInfo()
+    if CONTEXT_EVENTS[event] and info.watch then
+        info.watch(self)
+        info = self:StateInfo()
+    end
 
-    if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_LEAVING_WORLD" then
-        self:Abort("Placement interrupted.")
-    elseif event == "HOUSE_EDITOR_MODE_CHANGE_FAILURE" or event == "HOUSING_DECOR_PLACE_FAILURE" then
-        self:OnFailure(event, ...)
-    elseif event == "HOUSING_DECOR_PLACE_SUCCESS" then
+    -- A paused build still hears back about a save it sent.
+    if event == "HOUSING_DECOR_PLACE_SUCCESS" then
         local guid, _, isNew, isPreview = ...
-        local saved = self:StateInfo().saved
-        if not isPreview and saved then saved(self, guid, isNew) end
+        if not isPreview and info.saved then info.saved(self, guid, isNew) end
+    elseif event == "HOUSE_EDITOR_MODE_CHANGE_FAILURE" or event == "HOUSING_DECOR_PLACE_FAILURE" then
+        if info.failed then info.failed(self, event, ...)
+        elseif self:Busy() then self:OnFailure(event, ...) end
+    elseif (event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_LEAVING_WORLD") and self:Busy() then
+        self:Abort("Placement interrupted.")
     end
 end
 
-function Placement:OnFailure(event, result)
+function Placement:FailureText(event, result)
     local name = resultName(result)
-    local limited = name == "TooManyRequests"
-    if event == "HOUSING_DECOR_PLACE_FAILURE" and limited and self:RetryThrottledCopy() then return end
+    if name == "TooManyRequests" then
+        return "WoW is limiting housing requests. Wait a few seconds before trying again. ("
+            .. name .. ", " .. tostring(result) .. ")"
+    end
     local action = event == "HOUSE_EDITOR_MODE_CHANGE_FAILURE" and "changing housing mode"
         or self:StateInfo().action or "placing a copy"
-    self:Abort(limited and ("WoW is limiting housing requests. Wait a few seconds before trying again. ("
-        .. name .. ", " .. tostring(result) .. ")")
-        or ("WoW rejected " .. action .. ": " .. name .. " (" .. tostring(result) .. ")."))
+    return "WoW rejected " .. action .. ": " .. name .. " (" .. tostring(result) .. ")."
+end
+
+function Placement:OnFailure(event, result)
+    if event == "HOUSING_DECOR_PLACE_FAILURE" and resultName(result) == "TooManyRequests"
+        and self:RetryThrottledCopy() then return end
+    self:Abort(self:FailureText(event, result))
 end
