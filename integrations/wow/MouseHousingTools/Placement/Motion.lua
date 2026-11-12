@@ -58,7 +58,7 @@ function Motion.New(api)
 end
 
 function Motion:MoveTo(target, item, guid, done, onPhase)
-    self:Begin(Motion.Phases(MHT.NativeEdit.For(target, item), Motion.StandardProfile), guid, done, onPhase)
+    self:Begin(Motion.Phases(MHT.Maneuver.For(target, item), Motion.StandardProfile), guid, done, onPhase)
 end
 
 function Motion:Shift(shift, guid, done)

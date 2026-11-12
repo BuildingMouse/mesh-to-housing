@@ -1,6 +1,6 @@
 local _, MHT = ...
-local NativeEdit = {}
-MHT.NativeEdit = NativeEdit
+local Maneuver = {}
+MHT.Maneuver = Maneuver
 local Rotation = MHT.Rotation
 
 -- Turns a plan item into editor moves for a fresh copy of the source.
@@ -9,7 +9,7 @@ local Rotation = MHT.Rotation
 
 local RINGS = { "x", "y", "z" }
 
-function NativeEdit.Turned(turns, axes, last)
+function Maneuver.Turned(turns, axes, last)
     local result = Rotation.Identity()
     for _, ring in ipairs(RINGS) do
         local spec = axes[ring]
@@ -43,7 +43,7 @@ end
 
 local function scaled(v, factor) return { x = v.x * factor, y = v.y * factor, z = v.z * factor } end
 
-function NativeEdit.For(target, item)
+function Maneuver.For(target, item)
     local axes = item.axes
     local turns = ringTurns(target.rotation, axes)
     local shift = { x = target.x, y = target.y, z = target.z }
@@ -53,7 +53,7 @@ function NativeEdit.For(target, item)
     add(item.resizePivot, target.scale - 1)
     local before = Rotation.Identity()
     for _, ring in ipairs(RINGS) do
-        local after = NativeEdit.Turned(turns, axes, ring)
+        local after = Maneuver.Turned(turns, axes, ring)
         local pivot = scaled(item.pivots[ring], target.scale)
         add(Rotation.Apply(after, pivot), 1)
         add(Rotation.Apply(before, pivot), -1)
