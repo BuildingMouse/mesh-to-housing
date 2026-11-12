@@ -206,7 +206,7 @@ function Window:CountText(total, running)
     if not running then return string.format("%d items", total) end
     if placement.stage == "preparing" then return string.format("Preparing %d / %d", placement.copiesCreated, total) end
     if placement:Ready() then return string.format("%d copies ready", total) end
-    return string.format("%d / %d", placement.completed, total)
+    return string.format("%d / %d", placement:Completed(), total)
 end
 
 function Window:UpdateControls()

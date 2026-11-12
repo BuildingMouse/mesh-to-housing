@@ -24,8 +24,7 @@ end
 
 local function endMessage(placement)
     if placement.stage == "preparing" then return "Preparation stopped." end
-    return string.format("Build ended. %d of %d items placed.",
-        placement.completed - #placement.skipped, #placement.plan.items)
+    return string.format("Build ended. %d of %d items placed.", placement:CountItems("saved"), #placement.items)
 end
 
 function Placement.New(api, notify)
@@ -34,7 +33,7 @@ function Placement.New(api, notify)
         motion = MHT.Motion.New(api),
         notify = notify,
         state = "idle",
-        completed = 0,
+        items = {},
     }, Placement)
 end
 
@@ -64,7 +63,7 @@ function Placement:SetState(state, message)
     self.age = 0
     if message then
         self.status = message
-        self.notify(message, self.completed, self.plan and #self.plan.items or 0)
+        self.notify(message, self:Completed(), self.plan and #self.plan.items or 0)
     end
 end
 
@@ -94,12 +93,11 @@ function Placement:Start(plan, stage)
     self.plan = plan
     self.stage = stage
     self.fromPile = stage == "building"
-    self.completed, self.skipped = 0, {}
-    self.interrupted, self.retryFromPile, self.pauseRequested = nil, nil, false
+    self:ResetItems(#plan.items)
+    self.pauseRequested = false
     self.source = nil
     self.modeRequest = nil
     self.activeGUID, self.lastRejectedGUID = nil, nil
-    self.finished = {}
     self:ResetPreparation()
 
     self.saved = self.api:SaveSettings()
@@ -130,14 +128,14 @@ function Placement:Abort(message)
     elseif self:Busy() then
         self:Interrupt(message)
     elseif message then
-        self.notify(message, self.completed, #self.plan.items)
+        self.notify(message, self:Completed(), #self.plan.items)
     end
 end
 
 function Placement:End(message)
     if not self:Busy() and not self:HasSession() then
         if message then
-            self.notify(message, self.completed, self.plan and #self.plan.items or 0)
+            self.notify(message, self:Completed(), self.plan and #self.plan.items or 0)
         end
         return
     end
@@ -161,7 +159,7 @@ function Placement:End(message)
     self.cursor = nil
     self.cursorAway, self.returnHold = false, nil
     self.activeGUID = nil
-    self.interrupted, self.retryFromPile, self.pauseRequested = nil, nil, false
+    self.pauseRequested = false
     self.stage = nil
 
     self:SetState("idle", message)
@@ -203,7 +201,6 @@ function Placement:Update(elapsed)
 end
 
 function Placement:OnEvent(event, ...)
-    -- Any finished mode change, the player's too, lets EnsureMode ask again.
     if event == "HOUSE_EDITOR_MODE_CHANGED" then self.modeRequest = nil end
     local info = self:StateInfo()
     if CONTEXT_EVENTS[event] and info.watch then
