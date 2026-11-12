@@ -12,6 +12,8 @@ local finite = MHT.Util.Finite
 ItemProfiles.DEFAULT_DECOR_ID = 23553
 
 local RINGS = { "x", "y", "z" }
+local ORIGIN = { x = 0, y = 0, z = 0 }
+local ASIDE_STEP = { x = 1, y = 1, z = 0 }
 
 function ItemProfiles.Logged(decorID)
     return MHT.ItemCatalog[decorID] or {}
@@ -34,7 +36,10 @@ function ItemProfiles.Dimensions(decorID)
     return dimensions
 end
 
-local ORIGIN = { x = 0, y = 0, z = 0 }
+function ItemProfiles.AsideStep(decorID)
+    local step = ItemProfiles.Logged(decorID).asideStep or ASIDE_STEP
+    return { x = step.x or 0, y = step.y or 0, z = step.z or 0 }
+end
 
 -- Everything NativeEdit needs to place the item.
 function ItemProfiles.Calibration(decorID)

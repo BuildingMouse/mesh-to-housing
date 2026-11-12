@@ -61,6 +61,10 @@ function Motion:MoveTo(target, item, guid, done, onPhase)
     self:Begin(Motion.Phases(MHT.NativeEdit.For(target, item), Motion.StandardProfile), guid, done, onPhase)
 end
 
+function Motion:Shift(shift, guid, done)
+    self:Begin(Motion.Phases(shift, Motion.StandardProfile), guid, done)
+end
+
 function Motion:Begin(queue, guid, done, onPhase)
     self:Stop()
     self.queue, self.guid, self.done, self.onPhase = queue, guid, done, onPhase
@@ -72,6 +76,10 @@ function Motion:Stop()
         pcall(self.api.Increment, self.api, name, false)
     end
     self.active, self.queue, self.phase = {}, nil, nil
+end
+
+function Motion:PreparingPhase()
+    return self.phase ~= nil and not self.phase.started
 end
 
 -- The editor changes submode a few frames late; keys held before then act in the old one.
@@ -88,7 +96,7 @@ function Motion:Update(elapsed)
     if not self.queue then return end
     local selected = self.api:Selected()
     -- The selection can drop for a moment while the submode changes.
-    if not selected and self.phase and not self.phase.started then self:WaitForSubmode(elapsed); return end
+    if not selected and self:PreparingPhase() then self:WaitForSubmode(elapsed); return end
     if not selected or selected.decorGUID ~= self.guid then error("Selection changed; placement stopped.") end
     if elapsed > 0.25 and next(self.active) then error("Frame delay interrupted timed movement. Try again.") end
     if not self.phase then
