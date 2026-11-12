@@ -5,6 +5,8 @@ MHT.DeveloperWindow = DeveloperWindow
 
 -- Calibration and test tools, shown with MHT.DEV_MODE.
 
+local MOTION_DEFAULTS = { rotate = MHT.Motion.StandardProfile.rotate, firstRotationAxis = 1 }
+
 local TAB_STATUS = {
     capture = "Select an item in Advanced mode, then Start to capture movement keys.",
     corners = "Run a named test, click the tile, then corners 1, 2, 3, 4. Restore the starting layout between cases.",
@@ -14,6 +16,14 @@ function DeveloperWindow.New(window)
     local self = setmetatable({ window = window, tab = "test", testCase = "transform", testChoices = {} },
         DeveloperWindow)
     local UI, uiState = MHT.UI, window.uiState
+    uiState.calibration = uiState.calibration or {}
+    uiState.calibration.measurements = uiState.calibration.measurements or {}
+    if MHT.DEV_MODE then MHT.ItemProfiles.UseSaved(uiState.calibration.measurements) end
+    uiState.transformTest = uiState.transformTest or {}
+    self.motionSettings = uiState.transformTest
+    for key, value in pairs(MOTION_DEFAULTS) do
+        if self.motionSettings[key] == nil then self.motionSettings[key] = value end
+    end
     local frame = UI.Surface(UIParent, 810, 650, "window")
     frame:SetPoint("CENTER", UIParent, "CENTER", uiState.devX or 0, uiState.devY or 0)
     frame:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -51,8 +61,12 @@ function DeveloperWindow.New(window)
         function() self:SelectTest("resize") end)
 
     local function finish() window:EndPlacement() end
-    self.transformTest = MHT.TransformTestPanel.New(self.testsFrame, window.motionSettings,
+    self.transformTest = MHT.TransformTestPanel.New(self.testsFrame, self.motionSettings,
         function() self:StartTransformTest() end, finish)
+    self.transform = MHT.TransformTest.New(MHT.Housing, function(message)
+        self:SetStatus(message)
+        window:UpdateControls()
+    end)
     uiState.figureTests = uiState.figureTests or {}
     self.figures = MHT.TestFiguresPanel.New(self.testsFrame,
         function() self:StartFigureTest() end, finish, uiState.figureTests)
@@ -69,7 +83,7 @@ function DeveloperWindow.New(window)
     self.resizeTest = MHT.ResizeTestPanel.New(self.testsFrame, self.calibration.resizePanel.controller,
         uiState.resizeTest, uiState.calibration, function() self:StartResizeTest() end,
         finish, function(message) self:SetStatus(message) end)
-    self.corners = MHT.CornerTestPanel.New(frame, MHT.Housing, uiState.calibration.measurements,
+    self.corners = MHT.CornerTestPanel.New(frame, MHT.Housing,
         function(id) self:StartCornerTest(id) end, function(message)
             self:SetStatus(message)
             window:UpdateControls()
@@ -80,11 +94,11 @@ function DeveloperWindow.New(window)
 end
 
 function DeveloperWindow:Busy()
-    return self.capture:Busy() or self.calibration:Busy() or self.corners:Busy()
+    return self.capture:Busy() or self.calibration:Busy() or self.corners:Busy() or self.transform:Busy()
 end
 
 function DeveloperWindow:Open(tab)
-    if self.window:Busy() then return end
+    if self.window:Locked() then return end
     self.tab = tab
     self.frame:Show()
     self.frame:Raise()
@@ -127,6 +141,7 @@ end
 
 function DeveloperWindow:UpdateControls(placementBusy, busy)
     local capturing, calibrating, cornering = self.capture:Busy(), self.calibration:Busy(), self.corners:Busy()
+    placementBusy = placementBusy or self.transform:Busy()
     self.capture:SetBlocked(placementBusy or calibrating or cornering)
     self.calibration:SetBlocked(placementBusy or cornering or (capturing and not calibrating))
     self.corners:SetBlocked(placementBusy or calibrating or capturing)
@@ -139,7 +154,7 @@ function DeveloperWindow:UpdateControls(placementBusy, busy)
         button:SetSelected(self.testCase == id)
     end
     self.transformTest:SetBlocked(busy)
-    self.figures:SetBlocked(busy)
+    self.figures:SetBlocked(busy, self.window.placement:Ready())
     self.resizeTest:Refresh(busy)
 end
 
@@ -148,12 +163,14 @@ function DeveloperWindow:Update(elapsed)
     self.calibration:Update(elapsed)
     if self.calibration.resizePanel.controller:Busy() then self.resizeTest:Refresh(true) end
     self.corners:Update(elapsed)
+    self.transform:Update(elapsed)
 end
 
 function DeveloperWindow:OnEvent(event, ...)
     self.capture:OnEvent(event, ...)
     self.calibration:OnEvent(event, ...)
     self.corners:OnEvent(event, ...)
+    self.transform:OnEvent(event, ...)
 end
 
 function DeveloperWindow:SetStatus(message)
@@ -167,7 +184,9 @@ function DeveloperWindow:OnPlacementMessage(message, completed, total)
 end
 
 function DeveloperWindow:Stop(message)
-    if self.corners:Busy() then
+    if self.transform:Busy() then
+        self.transform:Abort(message)
+    elseif self.corners:Busy() then
         self.corners:Abort(message)
     elseif self.calibration:Busy() then
         self.calibration:Abort(message)
@@ -185,10 +204,27 @@ function DeveloperWindow:Run(action, onError, ...)
     elseif not started and reason then self:SetStatus(reason) end
 end
 
+function DeveloperWindow:MotionProfile()
+    local profile = MHT.Util.Copy(MHT.Motion.StandardProfile)
+    for key in pairs(MOTION_DEFAULTS) do profile[key] = self.motionSettings[key] end
+    return profile
+end
+
+function DeveloperWindow:ValidMotionSettings()
+    local s = self.motionSettings
+    if not MHT.Util.Finite(s.rotate) or s.rotate <= 0 or s.rotate > 3600 then
+        return false, "Rotation speed must be greater than 0 and at most 3600° / second."
+    end
+    if s.firstRotationAxis ~= 1 and s.firstRotationAxis ~= 2 and s.firstRotationAxis ~= 3 then
+        return false, "First cycled axis must be 1 (X), 2 (Y), or 3 (Z)."
+    end
+    return true
+end
+
 function DeveloperWindow:CanStart(needsMotion)
-    if self.window:Busy() then return false end
+    if self.window:Locked() then return false end
     if needsMotion then
-        local valid, reason = self.window:ValidMotionSettings()
+        local valid, reason = self:ValidMotionSettings()
         if not valid then self:SetStatus(reason); return false end
     end
     return true
@@ -196,25 +232,30 @@ end
 
 function DeveloperWindow:StartTransformTest()
     if not self:CanStart(true) then return end
-    local window, s = self.window, self.window.motionSettings
+    local s = self.motionSettings
     for _, key in ipairs({ "x", "y", "z", "rx", "ry", "rz" }) do
         if not MHT.Util.Finite(s[key]) or math.abs(s[key]) > 360 then
             self:SetStatus("Test offsets and angles must be between -360 and 360.")
             return
         end
     end
-    local placement = window.placement
-    self:Run(placement.StartTest, function(reason) placement:Abort(reason) end, placement,
-        { x = s.x, y = s.y, z = s.z, turns = { x = s.rx, y = s.ry, z = s.rz } }, window:MotionProfile())
+    local transform = self.transform
+    self:Run(transform.Start, function(reason) transform:Abort(reason) end, transform,
+        { x = s.x, y = s.y, z = s.z, turns = { x = s.rx, y = s.ry, z = s.rz } }, self:MotionProfile())
 end
 
+-- Figure tests build like players do: prepare the pile, then build from it.
 function DeveloperWindow:StartFigureTest()
-    if not self:CanStart(true) then return end
+    local placement = self.window.placement
+    local abort = function(message) placement:Abort(message) end
+    if placement:Ready() then
+        self:Run(placement.Build, abort, placement)
+        return
+    end
+    if not self:CanStart(false) then return end
     local plan, reason = self.figures:Prepare()
     if not plan then self:SetStatus(reason); return end
-    local window = self.window
-    local placement = window.placement
-    self:Run(placement.Start, function(message) placement:Abort(message) end, placement, plan, window:MotionProfile())
+    self:Run(placement.Prepare, abort, placement, plan)
 end
 
 function DeveloperWindow:StartCapture()
@@ -226,12 +267,12 @@ end
 function DeveloperWindow:StartCalibration()
     local kind = self.calibration.settings.kind
     if not self:CanStart(kind == "pivot" or kind == "axes") then return end
-    self.calibration:Start(self.window:MotionProfile())
+    self.calibration:Start(self:MotionProfile())
 end
 
 function DeveloperWindow:StartCalibrationTest()
     if not self:CanStart(self.calibration.settings.kind == "pivot") then return end
-    self.calibration:StartTest(self.window:MotionProfile())
+    self.calibration:StartTest(self:MotionProfile())
 end
 
 function DeveloperWindow:StartResizeTest()
@@ -244,12 +285,12 @@ function DeveloperWindow:StartResizeTest()
     end
     local controller = self.calibration.resizePanel.controller
     self:Run(controller.Start, function(reason) controller:Abort(reason) end, controller,
-        "corners", self.calibration.settings.workflow, window:MotionProfile(), percent / 100)
+        "corners", self.calibration.settings.workflow, self:MotionProfile(), percent / 100)
 end
 
 function DeveloperWindow:StartCornerTest(id)
     if not self:CanStart(true) then return end
-    self.corners:Start(id, self.window:MotionProfile())
+    self.corners:Start(id, self:MotionProfile())
 end
 
 function DeveloperWindow:SavePosition()

@@ -87,7 +87,5 @@ function Rhombicosidodecahedron.Build(scale, dimensions)
             center.y * edge / 2 - normal.y * thickness / 2, centerZ + center.z * edge / 2 - normal.z * thickness / 2,
             MHT.Rotation.FromAxes(face.u, face.v, normal), scale)
     end
-    local plan = MHT.Plan.New(items, { side, depth, height })
-    plan.fit = function(itemDimensions) return Rhombicosidodecahedron.Build(scale, itemDimensions) end
-    return plan
+    return MHT.Plan.New(items, { side, depth, height })
 end

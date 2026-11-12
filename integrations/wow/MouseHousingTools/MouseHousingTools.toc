@@ -24,8 +24,11 @@ Placement\Placement.lua
 Dev\Figures\Cube.lua
 Dev\Figures\TiltedCircle.lua
 Dev\Housing.lua
-Dev\Placement.lua
+Dev\Motion.lua
+Dev\NativeEdit.lua
 Dev\RotationAxes.lua
+Dev\ItemProfiles.lua
+Dev\TransformTest.lua
 Dev\RotationCalibration.lua
 Dev\CornerTest.lua
 Dev\MovementCapture.lua
@@ -43,6 +46,7 @@ UI\Footer.lua
 UI\Window.lua
 UI\Editor\EditorChrome.lua
 UI\Editor\EditorControls.lua
+UI\Dev\UI.lua
 UI\Dev\CapturePanel.lua
 UI\Dev\RotationCalibrationPanel.lua
 UI\Dev\ResizeCalibrationPanel.lua

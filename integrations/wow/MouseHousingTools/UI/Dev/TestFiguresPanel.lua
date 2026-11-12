@@ -12,10 +12,13 @@ Panel.Cases = {
         description = "5 tiles, 72° apart, tilted 30° outward. Each tile tests combined rotations." },
 }
 
+local TILE = MHT.ItemProfiles.DEFAULT_DECOR_ID
+
 function Panel.New(parent, start, finish, settings)
     settings = settings or {}
     settings.percent = settings.percent or settings.spherePercent or 100
     local self = setmetatable({ settings = settings }, Panel)
+    local tileName = MHT.ItemProfiles.Logged(TILE).name or ("decor item " .. TILE)
     local UI = MHT.UI
     self.frame = CreateFrame("Frame", nil, parent)
     self.frame:SetAllPoints(parent)
@@ -24,12 +27,12 @@ function Panel.New(parent, start, finish, settings)
     self.size = UI.Number(self.frame, "Item size (20–200%)", 18, 225, settings.percent,
         function(value) settings.percent = value; self:Preview() end)
     UI.Text(self.frame,
-        "Uses saved size, pivots and axes. Resizing needs a saved resize pivot. Use a calibrated item at 100%. Copies rotate, resize, then move above the source.",
+        "Uses saved size, pivots and axes. Resizing needs a saved resize pivot. Use a " .. tileName
+            .. " at 100%. Copies rotate, resize, then move above the source.",
         18, 300, 260)
     UI.Text(self.frame,
-        "Start, then hover your source. Keep still while copies are placed. Click copies in Advanced mode; keep the camera still.",
+        "Start, then hover your source and keep still while the pile is made. Press Build, then click copies in Advanced mode; keep the camera still.",
         18, 425, 260)
-    UI.Text(self.frame, "Preview uses example tile dimensions; placement uses your saved measurements.", 302, 510, 490)
     self.preview = MHT.Preview.New(self.frame)
     self.preview.frame:SetPoint("TOPLEFT", 302, -120)
     self.preview.frame:SetHeight(380)
@@ -62,10 +65,12 @@ function Panel:Preview()
     if type(percent) ~= "number" or percent ~= percent or percent < 20 or percent > 200 then
         self.reason = "Item size must be between 20% and 200%."
     end
+    local dimensions
+    if not self.reason then dimensions, self.reason = MHT.ItemProfiles.Dimensions(TILE) end
     if not self.reason then
-        -- Example tile proportions; placement refits to the saved item size.
-        self.plan, self.reason = MHT.Layout.Solids[self.case.shape].Build(percent / 100, { 2, 2, 0.25 })
+        self.plan, self.reason = MHT.Layout.Solids[self.case.shape].Build(percent / 100, dimensions)
     end
+    if self.plan then self.plan.requires = TILE end
     self.preview:SetPlan(self.plan)
 end
 
@@ -75,8 +80,9 @@ function Panel:Prepare()
     return self.plan, self.reason
 end
 
-function Panel:SetBlocked(blocked)
+function Panel:SetBlocked(blocked, ready)
     self.size:SetEnabled(not blocked)
-    self.start:SetEnabled(not blocked)
+    self.start:SetEnabled(not blocked or ready)
+    self.start:SetText(ready and "Build" or "Start test")
     self.finish:SetEnabled(blocked)
 end

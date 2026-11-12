@@ -31,7 +31,7 @@ end
 function SculptPanel:Plan()
     local entry, reason = self.picker:Entry()
     if not entry then return nil, reason end
-    return MHT.ModelLibrary.Build(entry.id, 1, (self.window:ItemDimensions(entry.decorID)))
+    return MHT.ModelLibrary.Build(entry.id, 1, (MHT.ItemProfiles.Dimensions(entry.decorID)))
 end
 
 function SculptPanel:Refresh()

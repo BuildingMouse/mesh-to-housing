@@ -5,7 +5,6 @@ MHT.Window = Window
 
 -- The main window.
 
-local MOTION_DEFAULTS = { rotate = MHT.Motion.StandardProfile.rotate, firstRotationAxis = 1 }
 local MODES = { { "shapes", "Shapes" }, { "sketch", "3D Sketch" }, { "sculpt", "3D Sculpt" } }
 
 local function centerOffset(frame)
@@ -20,19 +19,12 @@ function Window.New(settings, uiState)
     models.percent, models.itemPercent = models.percent or 100, models.itemPercent or 100
     if not MHT.ModelLibrary.Get(models.id) then models.id = MHT.ModelLibrary.Entries[1].id end
     if models.source ~= "import" then models.source = "library" end
-    uiState.calibration = uiState.calibration or {}
-    uiState.calibration.measurements = uiState.calibration.measurements or {}
-    uiState.transformTest = uiState.transformTest or {}
-    local motion = uiState.transformTest
-    for key, value in pairs(MOTION_DEFAULTS) do
-        if motion[key] == nil then motion[key] = value end
-    end
 
     local self = setmetatable({ settings = settings, uiState = uiState, modelSettings = uiState.models,
-        motionSettings = motion, measurements = uiState.calibration.measurements, mode = "shapes" }, Window)
+        mode = "shapes" }, Window)
     self.placement = MHT.Placement.New(MHT.Housing, function(message, completed, total)
         self:OnPlacementMessage(message, completed, total)
-    end, self.measurements)
+    end)
     self:CreateFrame()
     self.settingsPanel = MHT.SettingsPanel.New(self, self.frame)
     self:CreatePreview()
@@ -96,16 +88,17 @@ function Window:CreatePreview()
     MHT.Theme.Skin(self.preview.frame, nil)
 end
 
-function Window:ItemDimensions(decorID)
-    return MHT.ItemProfiles.Dimensions(decorID, self.measurements)
-end
-
 function Window:Busy()
     return self.placement:Busy() or self.developer:Busy()
 end
 
+-- Settings stay fixed from Prepare until the build ends.
+function Window:Locked()
+    return self:Busy() or self.placement:HasSession()
+end
+
 function Window:SelectMode(mode)
-    if self:Busy() then return end
+    if self:Locked() then return end
     self.mode = mode
     self.settingsPanel:ScrollToTop()
     self:Refresh()
@@ -118,36 +111,37 @@ function Window:Refresh()
     self.plan = plan
     self.preview:SetPlan(plan, self.settingsPanel:Section().points)
     self:UpdateProgress(true)
-    self:SetStatus(plan and "Press Start, then hover the item to copy and hold the cursor still." or reason or "")
+    self:SetStatus(plan and self:StartHint(#plan.items) or reason or "")
     self:UpdateControls()
 end
 
-function Window:MotionProfile()
-    local profile = MHT.Util.Copy(MHT.Motion.StandardProfile)
-    for key in pairs(MOTION_DEFAULTS) do profile[key] = self.motionSettings[key] end
-    return profile
+function Window:StartHint(count)
+    if self.useExistingPile then
+        return string.format("Stack %d copies of the item in one spot, then press Build and click them one at a time.", count)
+    end
+    return "Press Prepare items, then hover the item to copy and hold the cursor still."
 end
 
-function Window:ValidMotionSettings()
-    local s = self.motionSettings
-    if not MHT.Util.Finite(s.rotate) or s.rotate <= 0 or s.rotate > 3600 then
-        return false, "Rotation speed must be greater than 0 and at most 3600° / second."
-    end
-    if s.firstRotationAxis ~= 1 and s.firstRotationAxis ~= 2 and s.firstRotationAxis ~= 3 then
-        return false, "First cycled axis must be 1 (X), 2 (Y), or 3 (Z)."
-    end
-    return true
+function Window:UseExistingPile(checked)
+    if self:Locked() then return end
+    self.useExistingPile = checked
+    self:Refresh()
 end
 
+-- Prepares the pile, or builds from it once it is ready.
 function Window:StartPlacement()
     if self:Busy() then return end
-    self.settingsPanel:CommitEdits()
-    self:Refresh()
-    if not self.plan then return end
-    local valid, reason = self:ValidMotionSettings()
-    if not valid then self:SetStatus(reason); return end
     local placement = self.placement
-    local ok, started, reason = pcall(placement.Start, placement, self.plan, self:MotionProfile())
+    local ok, started, reason
+    if placement:Ready() then
+        ok, started, reason = pcall(placement.Build, placement)
+    else
+        self.settingsPanel:CommitEdits()
+        self:Refresh()
+        if not self.plan then return end
+        local start = self.useExistingPile and placement.BuildFromPile or placement.Prepare
+        ok, started, reason = pcall(start, placement, self.plan)
+    end
     if not ok then placement:Abort(MHT.Util.ErrorText(started))
     elseif not started then self:SetStatus(reason) end
 end
@@ -169,30 +163,35 @@ function Window:OnPlacementMessage(message, completed, total)
     self:UpdateControls()
 end
 
--- A running build is previewed as fitted to the real item.
 function Window:UpdateProgress(reset)
     local placement = self.placement
-    local running = not reset and placement:Busy() and placement.plan ~= nil
+    local running = not reset and (placement:Busy() or placement:HasSession()) and placement.plan ~= nil
     local plan = running and placement.plan or self.plan
     local total = plan and #plan.items or 0
-    self.footer:SetCount(total == 0 and "Items: —" or running and string.format("%d / %d", placement.completed, total)
-        or string.format("%d items", total))
-    if running and self.preview.plan ~= placement.plan then
-        self.preview:SetPlan(placement.plan, self.settingsPanel:Section().points)
-    end
+    self.footer:SetCount(self:CountText(total, running))
+end
+
+function Window:CountText(total, running)
+    local placement = self.placement
+    if total == 0 then return "Items: —" end
+    if not running then return string.format("%d items", total) end
+    if placement.stage == "preparing" then return string.format("Preparing %d / %d", placement.copiesCreated, total) end
+    if placement:Ready() then return string.format("%d copies ready", total) end
+    return string.format("%d / %d", placement.completed, total)
 end
 
 function Window:UpdateControls()
     local placement, developer = self.placement, self.developer
-    local busy = self:Busy()
-    developer:UpdateControls(placement:Busy(), busy)
-    self.settingsPanel:UpdateControls(busy)
+    local busy, locked = self:Busy(), self:Locked()
+    developer:UpdateControls(placement:Busy() or placement:HasSession(), locked)
+    self.settingsPanel:UpdateControls(locked)
     for mode, tab in pairs(self.tabs) do
-        tab:SetEnabled(not busy)
+        tab:SetEnabled(not locked)
         tab:SetSelected(self.mode == mode)
     end
-    if self.developerButton then self.developerButton:SetEnabled(not busy) end
-    self.footer:Update(not busy and self.plan ~= nil, placement:Busy(), busy)
+    if self.developerButton then self.developerButton:SetEnabled(not locked) end
+    local canStart = not busy and (placement:Ready() or not locked and self.plan ~= nil)
+    self.footer:Update(placement, canStart, locked, self.useExistingPile)
 end
 
 function Window:Update(elapsed)

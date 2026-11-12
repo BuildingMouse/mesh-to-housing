@@ -3,7 +3,7 @@ local Panel = {}
 Panel.__index = Panel
 MHT.CornerTestPanel = Panel
 
-function Panel.New(parent, api, measurements, start, notify)
+function Panel.New(parent, api, start, notify)
     local self = setmetatable({ chosen = "test_x", buttons = {}, rows = {}, notify = notify }, Panel)
     local UI = MHT.UI
     self.frame = CreateFrame("Frame", nil, parent)
@@ -31,7 +31,7 @@ function Panel.New(parent, api, measurements, start, notify)
     self.run = UI.Button(self.frame, "Run test_x", 18, 520, 170, function() start(self.chosen) end)
     self.stop = UI.Button(self.frame, "End", 196, 520, 100, function() self.controller:Abort() end)
     UI.Muted(self.frame, "Results stay in game for screenshots. Restore the starting layout before each case. Calibration values stay unchanged.", 315, 515, 465)
-    self.controller = MHT.CornerTest.New(api, measurements, function(message, completed, total)
+    self.controller = MHT.CornerTest.New(api, function(message, completed, total)
         self.message = message
         notify(message, completed, total)
     end)

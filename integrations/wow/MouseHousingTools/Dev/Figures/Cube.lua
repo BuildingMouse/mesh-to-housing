@@ -25,7 +25,5 @@ function Cube.Build(scale, dimensions)
         items[#items + 1] = MHT.Plan.Placement(face.normal[1] * inset, face.normal[2] * inset,
             centerZ + face.normal[3] * inset, Rotation.About(face.axis, math.rad(face.degrees)), scale, face.label)
     end
-    local plan = MHT.Plan.New(items, { side, depth, height })
-    plan.fit = function(itemDimensions) return Cube.Build(scale, itemDimensions) end
-    return plan
+    return MHT.Plan.New(items, { side, depth, height })
 end

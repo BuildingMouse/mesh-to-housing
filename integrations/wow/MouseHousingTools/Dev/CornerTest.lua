@@ -21,8 +21,8 @@ Test.Corners = {
     { name = "Corner 4", location = "near-right", x = 1, y = -1 },
 }
 
-function Test.New(api, measurements, notify)
-    return setmetatable({ api = api, measurements = measurements, notify = notify,
+function Test.New(api, notify)
+    return setmetatable({ api = api, notify = notify,
         motion = MHT.Motion.New(api), state = "idle", completed = 0 }, Test)
 end
 
@@ -67,9 +67,9 @@ function Test:BeginTile(selected)
     if not selected.decorID or not selected.decorGUID then
         self:Reject(selected, "Choose a placed tile."); return
     end
-    local dimensions, reason = MHT.ItemProfiles.Dimensions(selected.decorID, self.measurements)
+    local dimensions, reason = MHT.ItemProfiles.Dimensions(selected.decorID)
     if not dimensions then self:Reject(selected, reason); return end
-    local item = MHT.ItemProfiles.Calibration(selected.decorID, self.measurements)
+    local item = MHT.ItemProfiles.Calibration(selected.decorID)
     local points = {}
     for i, corner in ipairs(Test.Corners) do
         points[i] = { x = corner.x * dimensions[1] / 2, y = corner.y * dimensions[2] / 2, z = 0 }

@@ -26,15 +26,11 @@ function Library.Build(id, scale, dimensions)
     if not entry then return nil, "Choose a model from the library." end
     if not validScale(scale) then return nil, "Item size must be between 20% and 200%." end
     if not dimensions then return nil, "The model's item has no logged size." end
-    local solid = MHT.Layout.Solids[entry.solid]
-    local function build(itemDimensions)
-        local plan, reason = solid.Build(scale, itemDimensions)
-        if not plan then return nil, reason end
-        plan.requires, plan.fit = entry.decorID, build
-        plan.source = Plan.Placement(0, 0, 0, Rotation.Identity(), 1)
-        return plan
-    end
-    return build(dimensions)
+    local plan, reason = MHT.Layout.Solids[entry.solid].Build(scale, dimensions)
+    if not plan then return nil, reason end
+    plan.requires = entry.decorID
+    plan.source = Plan.Placement(0, 0, 0, Rotation.Identity(), 1)
+    return plan
 end
 
 function Library.Sketch(id, modelScale, itemScale, dimensions)
@@ -46,6 +42,6 @@ function Library.Sketch(id, modelScale, itemScale, dimensions)
         item.x, item.y, item.z = item.x * modelScale, item.y * modelScale, item.z * modelScale
         item.rotation, item.scale = Rotation.Identity(), itemScale
     end
-    plan.requires, plan.fit = nil, nil
+    plan.requires = nil
     return plan
 end

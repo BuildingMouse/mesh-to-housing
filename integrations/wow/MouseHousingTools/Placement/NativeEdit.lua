@@ -9,7 +9,7 @@ local Rotation = MHT.Rotation
 
 local RINGS = { "x", "y", "z" }
 
-local function turned(turns, axes, last)
+function NativeEdit.Turned(turns, axes, last)
     local result = Rotation.Identity()
     for _, ring in ipairs(RINGS) do
         local spec = axes[ring]
@@ -44,7 +44,7 @@ end
 local function scaled(v, factor) return { x = v.x * factor, y = v.y * factor, z = v.z * factor } end
 
 function NativeEdit.For(target, item)
-    local axes = item.axes or MHT.RotationAxes.DEFAULT
+    local axes = item.axes
     local turns = ringTurns(target.rotation, axes)
     local shift = { x = target.x, y = target.y, z = target.z }
     local function add(vector, factor)
@@ -53,7 +53,7 @@ function NativeEdit.For(target, item)
     add(item.resizePivot, target.scale - 1)
     local before = Rotation.Identity()
     for _, ring in ipairs(RINGS) do
-        local after = turned(turns, axes, ring)
+        local after = NativeEdit.Turned(turns, axes, ring)
         local pivot = scaled(item.pivots[ring], target.scale)
         add(Rotation.Apply(after, pivot), 1)
         add(Rotation.Apply(before, pivot), -1)
@@ -63,21 +63,4 @@ function NativeEdit.For(target, item)
         if math.abs(shift[axis]) < 1e-9 then shift[axis] = 0 end
     end
     return { x = shift.x, y = shift.y, z = shift.z, scale = target.scale ~= 1 and target.scale or nil, turns = turns }
-end
-
-function NativeEdit.TurnedPoints(points, turns, item)
-    local axes = item.axes or MHT.RotationAxes.DEFAULT
-    local center, before = { x = 0, y = 0, z = 0 }, Rotation.Identity()
-    for _, ring in ipairs(RINGS) do
-        local after = turned(turns, axes, ring)
-        local from, to = Rotation.Apply(before, item.pivots[ring]), Rotation.Apply(after, item.pivots[ring])
-        for _, axis in ipairs(RINGS) do center[axis] = center[axis] + from[axis] - to[axis] end
-        before = after
-    end
-    local result = {}
-    for i, point in ipairs(points) do
-        local offset = Rotation.Apply(before, point)
-        result[i] = { x = center.x + offset.x, y = center.y + offset.y, z = center.z + offset.z }
-    end
-    return result, center
 end
