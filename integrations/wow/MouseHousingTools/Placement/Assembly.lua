@@ -4,29 +4,109 @@ local State = Placement.States
 local copy = MHT.Util.Copy
 
 -- Building from the pile: the player clicks each copy and it moves to its place in the plan.
--- The build can pause, and keeps what it needs to finish an interrupted item.
+-- Each plan item keeps its own state, so the build can pause and finish an interrupted item.
 
 local RETRY_FROM_PILE = "Press Resume, then click any matching copy in the pile."
 local RESUME_SAME = "Press Resume and click the same item."
+local SAVE_AGAIN = " Select the same item and press Resume to save it again."
+
+local ITEM_FIELDS = {
+    waiting = {},
+    moving = { "guid", "checkpoint" },
+    saving = { "guid", "checkpoint", "onSaved", "onFailed" },
+    saved = { "guid" },
+    skipped = { "guid" },
+    stopped = { "guid", "checkpoint" },
+    unsaved = { "guid", "checkpoint", "onSaved", "reason" },
+    undone = {},
+}
+local DONE = { saved = true, skipped = true }
+
+local PROMPTS = {
+    saving = "Waiting for WoW to confirm this item.",
+    stopped = "The move stopped partway. " .. RESUME_SAME,
+    undone = "WoW undid the move. " .. RETRY_FROM_PILE,
+}
+local UNSAVED = {
+    failed = "WoW could not save this item.",
+    error = "The item could not be saved.",
+    reload = "The game reloaded while saving this item.",
+}
+
+-- Every change goes through here, so an item only ever carries its own state's fields.
+local function setItem(item, state, fields)
+    local allowed = ITEM_FIELDS[state] or error("Unknown item state: " .. tostring(state))
+    for key in pairs(item) do item[key] = nil end
+    item.state = state
+    for _, key in ipairs(allowed) do item[key] = fields and fields[key] end
+end
+
+local function prompt(item)
+    if item.state == "unsaved" then return (UNSAVED[item.reason] or UNSAVED.error) .. SAVE_AGAIN end
+    return PROMPTS[item.state] or "Paused. Press Resume to continue."
+end
+
+function Placement:ResetItems(count)
+    self.items = {}
+    for i = 1, count do
+        self.items[i] = {}
+        setItem(self.items[i], "waiting")
+    end
+end
+
+function Placement:Current()
+    for i, item in ipairs(self.items) do
+        if not DONE[item.state] then return item, i end
+    end
+end
+
+function Placement:Completed()
+    local _, index = self:Current()
+    return (index or #self.items + 1) - 1
+end
+
+function Placement:CountItems(state)
+    local count = 0
+    for _, item in ipairs(self.items) do
+        if item.state == state then count = count + 1 end
+    end
+    return count
+end
+
+function Placement:IsFinishedCopy(guid)
+    for _, item in ipairs(self.items) do
+        if item.guid == guid and DONE[item.state] then return true end
+    end
+    return false
+end
+
+function Placement:SettleSave(item, outcome, reason)
+    setItem(item, outcome, { guid = item.guid, checkpoint = item.checkpoint, onSaved = item.onSaved, reason = reason })
+end
+
+function Placement:SendSave(item, message)
+    self:PauseNow(message)
+    if not pcall(self.api.Commit, self.api) then
+        self:SettleSave(item, item.onFailed, "error")
+        self:PauseNow()
+    end
+end
 
 function Placement:Build(skipping)
     if not self:Ready() and not self:Paused() then return nil, "Prepare items or use an existing pile first." end
     if not self.api:Active() then return nil, "Open the housing editor first." end
-    local interrupted = self.interrupted
-    if interrupted and interrupted.pending then return nil, "Waiting for WoW to confirm this item." end
-    if interrupted and interrupted.saveFailed then
+    local item = self:Current()
+    if item.state == "saving" then return nil, PROMPTS.saving end
+    if item.state == "unsaved" then
         local selected = self.api:Selected()
-        if not selected or selected.decorGUID ~= interrupted.guid then
-            return nil, "Select the same item, then press Resume to save where it stopped."
-        end
-        self:SaveInterrupted("Saving the item where it stopped...")
+        if not selected or selected.decorGUID ~= item.guid then return nil, prompt(item) end
+        setItem(item, "saving", { guid = item.guid, checkpoint = item.checkpoint, onSaved = item.onSaved,
+            onFailed = "unsaved" })
+        self:SendSave(item, "Saving the item...")
         return true
     end
-    if interrupted and not interrupted.motion then
-        return nil, "This item has no moves left to finish. Skip it or end the build."
-    end
     -- After a skip or an interruption, the item to click may still be selected.
-    if not skipping and not interrupted and not self.retryFromPile and self.api:IsSelected() then
+    if not skipping and item.state == "waiting" and self.api:IsSelected() then
         return nil, "Finish editing the selected item first."
     end
     self.stage, self.pauseRequested = "building", false
@@ -45,26 +125,26 @@ function Placement:BeginSelectionPhase()
 end
 
 function Placement:SelectMessage()
-    if self.interrupted then return "Click the same item again to finish its move." end
-    if self.retryFromPile then return "Click any matching copy in the pile." end
-    if self.completed == 0 then
+    local item, index = self:Current()
+    if item.state == "stopped" then return "Click the same item again to finish its move." end
+    if item.state == "undone" then return "Click any matching copy in the pile." end
+    if index == 1 then
         return string.format("Click the copies in the pile one at a time (1 / %d). Keep the camera still.",
-            #self.plan.items)
+            #self.items)
     end
-    return string.format("Click the next copy in the pile (%d / %d).", self.completed + 1, #self.plan.items)
+    return string.format("Click the next copy in the pile (%d / %d).", index, #self.items)
 end
 
 function Placement:CompleteMessage()
-    local skipped = #self.skipped
-    if skipped == 0 then return "Build complete. All " .. self.completed .. " items were placed." end
+    local skipped = self:CountItems("skipped")
+    if skipped == 0 then return "Build complete. All " .. #self.items .. " items were placed." end
     return string.format("Build complete. %d of %d items placed, %d skipped.",
-        self.completed - skipped, #self.plan.items, skipped)
+        self:CountItems("saved"), #self.items, skipped)
 end
 
 function Placement:RejectReason(selected)
     if selected.isLocked then return "Someone else is editing that item. Click another copy." end
     if not self.source then
-        -- An existing pile has no source to keep: the first copy clicked sets the item.
         local ok, reason = self:UseSource(selected)
         if not ok then return reason end
     end
@@ -75,8 +155,9 @@ function Placement:RejectReason(selected)
     if selected.decorID and selected.decorID ~= self.source.decorID then
         return "That is a different decor item. Click a copy."
     end
-    if self.finished[guid] then return "That copy is finished. Click another copy." end
-    if self.interrupted and guid ~= self.interrupted.guid then return "Click the same item that was interrupted." end
+    if self:IsFinishedCopy(guid) then return "That copy is finished. Click another copy." end
+    local item = self:Current()
+    if item.state == "stopped" and guid ~= item.guid then return "Click the same item that was interrupted." end
 end
 
 function Placement:HandleSelectedCopy(selected)
@@ -87,19 +168,22 @@ function Placement:HandleSelectedCopy(selected)
     if reason then
         if self.lastRejectedGUID ~= guid then
             self.lastRejectedGUID = guid
-            self.notify(reason, self.completed, #self.plan.items)
+            self.notify(reason, self:Completed(), #self.items)
         end
         return
     end
 
-    self.lastRejectedGUID, self.retryFromPile = nil, nil
+    self.lastRejectedGUID = nil
     self.activeGUID = guid
+    local item, index = self:Current()
+    local checkpoint = item.state == "stopped" and item.checkpoint or nil
+    setItem(item, "moving", { guid = guid, checkpoint = checkpoint })
 
-    local index = self.completed + 1
     local target = self.plan.items[index]
-    self:SetState("moving", string.format("Moving selected copy to target %d / %d...", index, #self.plan.items))
+    self:SetState("moving", string.format("Moving selected copy to target %d / %d...", index, #self.items))
 
     local function done()
+        setItem(item, "saving", { guid = guid, checkpoint = checkpoint, onSaved = "saved", onFailed = "unsaved" })
         self:SetState("committing", self.pauseRequested and "Pausing after this item..." or "Saving the selected copy...")
         self.api:Commit()
     end
@@ -107,8 +191,8 @@ function Placement:HandleSelectedCopy(selected)
         self:SetState("moving", self.pauseRequested and "Pausing after this item..."
             or label .. " selected copy..." .. (target.label and (" " .. target.label) or ""))
     end
-    if self.interrupted then
-        self.motion:Resume(self.interrupted.motion, guid, done, onPhase)
+    if checkpoint then
+        self.motion:Resume(checkpoint, guid, done, onPhase)
     else
         self.motion:MoveTo(target, MHT.ItemProfiles.Calibration(self.source.decorID), guid, done, onPhase)
     end
@@ -116,12 +200,11 @@ end
 
 function Placement:CopyMoved(guid, isNew)
     if isNew or guid and guid ~= self.activeGUID then return end
-    self.finished[self.activeGUID] = true
-    self.interrupted = nil
-    self.completed = self.completed + 1
+    local item = self:Current()
+    self:SettleSave(item, item.onSaved)
     self.activeGUID = nil
 
-    if self.completed == #self.plan.items then
+    if not self:Current() then
         self:End(self:CompleteMessage())
     elseif self.pauseRequested then
         self:PauseNow()
@@ -140,7 +223,7 @@ function Placement:Pause()
     if not self:CanPause() then return nil, "Only a running build can be paused." end
     if self.state == "moving" or self.state == "committing" then
         self.pauseRequested = true
-        self.notify("Pausing after this item...", self.completed, #self.plan.items)
+        self.notify("Pausing after this item...", self:Completed(), #self.items)
     else
         self:PauseNow()
     end
@@ -151,23 +234,21 @@ function Placement:PauseNow(message)
     self.motion:Stop()
     if self.saved then pcall(self.api.RestoreSettings, self.api, self.saved) end
     self.saved, self.cursor, self.activeGUID, self.pauseRequested = nil, nil, nil, false
-    self:SetState("paused", message or self.interrupted and self.interrupted.message
-        or self.retryFromPile and RETRY_FROM_PILE or "Paused. Press Resume to continue.")
+    local item = self:Current()
+    self:SetState("paused", message or item and prompt(item))
 end
 
 function Placement:CanSkip()
-    return self:Paused() and (self.interrupted ~= nil or self.retryFromPile == true)
-        and not (self.interrupted and self.interrupted.pending)
+    local item = self:Current()
+    return self:Paused() and item ~= nil
+        and (item.state == "stopped" or item.state == "unsaved" or item.state == "undone")
 end
 
--- A partly moved item stays where it is and counts as finished, so it isn't clicked again.
 function Placement:Skip()
     if not self:CanSkip() then return nil, "Only an interrupted item can be skipped." end
-    if self.interrupted then self.finished[self.interrupted.guid] = true end
-    self.interrupted, self.retryFromPile = nil, nil
-    self.skipped[#self.skipped + 1] = self.completed + 1
-    self.completed = self.completed + 1
-    if self.completed >= #self.plan.items then
+    local item = self:Current()
+    setItem(item, "skipped", { guid = item.guid })
+    if not self:Current() then
         self:End(self:CompleteMessage())
         return true
     end
@@ -176,58 +257,48 @@ end
 
 -- Interruptions
 
--- Something stopped the move but the edit is still ours: save it where it is and keep the rest of the move.
-function Placement:Interrupt(message, retryOnFailure)
-    local committing = self.state == "committing"
-    message = message or "Placement interrupted."
-    if self.activeGUID then
-        if not retryOnFailure then message = message .. " " .. RESUME_SAME end
-        self.interrupted = { guid = self.activeGUID, motion = self.motion:Checkpoint(), message = message,
-            complete = committing, pending = committing, retryOnFailure = retryOnFailure }
-    elseif not retryOnFailure then
-        message = message .. " Press Resume to continue."
-    end
+function Placement:Interrupt(message)
+    message = (message or "Placement interrupted.") .. " "
+    local item = self:Current()
+    local moving = self.state == "moving"
     local selected = self.api:Available() and self.api:Selected()
-    local ownEdit = self.activeGUID and selected and selected.decorGUID == self.activeGUID
+    local ownEdit = moving and selected and selected.decorGUID == self.activeGUID
+        and self.api:Active() and self.api:Mode() == Enum.HouseEditorMode.ExpertDecor
+    local checkpoint = moving and self.motion:Checkpoint()
     self.state = "paused"
     self.motion:Stop()
-    -- Cancelling can keep part of the move, and replaying all of it would then overshoot.
-    if ownEdit and not committing and self.api:Active() and self.api:Mode() == Enum.HouseEditorMode.ExpertDecor then
-        self:SaveInterrupted(message)
-        return
-    end
-    self:PauseNow(message)
-end
-
-function Placement:SaveInterrupted(message)
-    local interrupted = self.interrupted
-    interrupted.pending, interrupted.saveFailed = true, nil
-    self:PauseNow(message)
-    if not pcall(self.api.Commit, self.api) then
-        interrupted.pending, interrupted.saveFailed = false, true
-        self:PauseNow("Could not save where the item stopped. Select the same item and press Resume.")
+    if ownEdit then
+        setItem(item, "saving", { guid = item.guid, checkpoint = checkpoint, onSaved = "stopped", onFailed = "unsaved" })
+        self:SendSave(item, message .. RESUME_SAME)
+    elseif moving then
+        setItem(item, "stopped", { guid = item.guid, checkpoint = checkpoint })
+        self:PauseNow(message .. RESUME_SAME)
+    else
+        self:PauseNow(message .. "Press Resume to continue.")
     end
 end
 
--- WoW undid the unfinished edit. A fresh copy is back in the pile, so any copy can take the target;
--- an item resumed from a saved stop is back at that stop and keeps its remaining moves.
+-- If placement was undone and the item is back in the pile, 
+-- we don't require to select the exact same item again.
 function Placement:RetryPlacement(reason)
+    local item = self:Current()
+    local fallback = item.checkpoint and "stopped" or "undone"
     if self.state == "committing" then
-        -- The save already sent must settle first.
-        self.retryFromPile = true
-        self:Interrupt(reason .. RETRY_FROM_PILE, true)
+        setItem(item, "saving", { guid = item.guid, checkpoint = item.checkpoint, onSaved = item.onSaved,
+            onFailed = fallback })
+        self.state = "paused"
+        self:PauseNow(reason .. PROMPTS.saving)
         return
     end
     local guid = self.activeGUID
-    local resumed = guid ~= nil and self.interrupted ~= nil and self.interrupted.guid == guid
-    if not resumed then self.interrupted, self.retryFromPile = nil, true end
+    setItem(item, fallback, { guid = item.guid, checkpoint = item.checkpoint })
     self.motion:Stop()
     local selected = self.api:Available() and self.api:Selected()
     if guid and selected and selected.decorGUID == guid and self.api:Active()
         and self.api:Mode() == Enum.HouseEditorMode.ExpertDecor then
         pcall(self.api.Cancel, self.api)
     end
-    self:PauseNow(reason .. (resumed and RESUME_SAME or RETRY_FROM_PILE))
+    self:PauseNow(reason .. (fallback == "stopped" and RESUME_SAME or RETRY_FROM_PILE))
 end
 
 function Placement:CheckBuildContext()
@@ -260,66 +331,59 @@ function Placement:MoveSaveFailed(event, result)
         self:OnFailure(event, result)
         return
     end
-    local message = self:FailureText(event, result) .. " Select the same item and press Resume to retry saving."
-    self:Interrupt(message)
-    local interrupted = self.interrupted
-    interrupted.pending, interrupted.saveFailed, interrupted.message = false, true, message
-    self:PauseNow()
+    local message = self:FailureText(event, result) .. SAVE_AGAIN
+    local item = self:Current()
+    self:SettleSave(item, item.onFailed, "failed")
+    self.state = "paused"
+    self:PauseNow(message)
 end
 
-function Placement:InterruptedSaved(guid, isNew)
-    local interrupted = self.interrupted
-    if isNew or not interrupted or not interrupted.pending or guid and guid ~= interrupted.guid then return end
-    interrupted.pending, interrupted.saveFailed = false, nil
-    if interrupted.complete then
-        self.finished[interrupted.guid], self.completed, self.interrupted = true, self.completed + 1, nil
-        if self.completed == #self.plan.items then
-            self:End(self:CompleteMessage())
-            return
-        end
-    end
-    self:PauseNow()
-end
-
-function Placement:InterruptedSaveFailed(event)
-    local interrupted = self.interrupted
-    if event ~= "HOUSING_DECOR_PLACE_FAILURE" or not interrupted or not interrupted.pending then return end
-    if interrupted.retryOnFailure then
-        self:RetryPlacement("WoW did not save this item. ")
+function Placement:PausedSaveConfirmed(guid, isNew)
+    local item = self:Current()
+    if isNew or not item or item.state ~= "saving" or guid and guid ~= item.guid then return end
+    self:SettleSave(item, item.onSaved)
+    if not self:Current() then
+        self:End(self:CompleteMessage())
         return
     end
-    interrupted.pending, interrupted.saveFailed = false, true
-    interrupted.message = "WoW could not save this item. Select the same item and press Resume to retry saving."
+    self:PauseNow()
+end
+
+function Placement:PausedSaveFailed(event)
+    local item = self:Current()
+    if event ~= "HOUSING_DECOR_PLACE_FAILURE" or not item or item.state ~= "saving" then return end
+    self:SettleSave(item, item.onFailed, "failed")
     self:PauseNow()
 end
 
 -- Reloading
 
--- Only confirmed progress is kept.
 function Placement:SaveBuild()
     if self.stage ~= "building" then return nil end
-    return { plan = copy(self.plan), completed = self.completed, finished = copy(self.finished),
-        skipped = copy(self.skipped), fromPile = self.fromPile, interrupted = copy(self.interrupted),
-        retryFromPile = self.retryFromPile,
+    return { plan = copy(self.plan), items = copy(self.items), fromPile = self.fromPile,
         source = self.source and { decorGUID = self.source.decorGUID, decorID = self.source.decorID } }
 end
 
 function Placement:RestoreBuild(saved)
     if self:Busy() or self:HasSession() or type(saved) ~= "table" then return nil end
-    local plan = saved.plan
-    if type(plan) ~= "table" or type(plan.items) ~= "table" or type(saved.completed) ~= "number"
-        or saved.completed >= #plan.items or not saved.fromPile and type(saved.source) ~= "table" then
+    local plan, items = saved.plan, saved.items
+    if type(plan) ~= "table" or type(plan.items) ~= "table" or type(items) ~= "table"
+        or #items ~= #plan.items or not saved.fromPile and type(saved.source) ~= "table" then
         return nil
     end
-    self.plan, self.stage, self.fromPile, self.source = copy(plan), "building", saved.fromPile, copy(saved.source)
-    self.completed, self.finished = saved.completed, copy(saved.finished or {})
-    self.skipped = copy(saved.skipped or {})
-    self.interrupted, self.retryFromPile, self.pauseRequested = copy(saved.interrupted), saved.retryFromPile, false
-    self.activeGUID, self.lastRejectedGUID, self.modeRequest = nil, nil, nil
-    if self.interrupted and self.interrupted.pending then
-        -- The reload came before WoW answered, so the save may not have happened.
-        self.interrupted.pending, self.interrupted.saveFailed = false, true
-        self.interrupted.message = "The game reloaded while saving this item. Select it and press Resume to save it again."
+    for _, item in ipairs(items) do
+        if type(item) ~= "table" or not ITEM_FIELDS[item.state] then return nil end
+    end
+    self.plan, self.items = copy(plan), copy(items)
+    local item = self:Current()
+    if not item then return nil end
+    self.stage, self.fromPile, self.source = "building", saved.fromPile, copy(saved.source)
+    self.pauseRequested, self.activeGUID, self.lastRejectedGUID, self.modeRequest = false, nil, nil, nil
+    if item.state == "moving" then
+        setItem(item, item.checkpoint and "stopped" or "undone", { guid = item.guid, checkpoint = item.checkpoint })
+    elseif item.state == "saving" then
+        setItem(item, "unsaved", { guid = item.guid, checkpoint = item.checkpoint, onSaved = item.onSaved,
+            reason = "reload" })
     end
     self:PauseNow()
     return true
@@ -348,4 +412,4 @@ State.moving = { waits = true, watch = Placement.CheckBuildContext, saved = Plac
 State.committing = { action = "saving the moved item", watch = Placement.CheckBuildContext,
     saved = Placement.CopyMoved, failed = Placement.MoveSaveFailed }
 
-State.paused = { saved = Placement.InterruptedSaved, failed = Placement.InterruptedSaveFailed }
+State.paused = { saved = Placement.PausedSaveConfirmed, failed = Placement.PausedSaveFailed }

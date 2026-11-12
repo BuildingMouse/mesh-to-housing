@@ -82,7 +82,7 @@ function Placement:CursorReady(elapsed)
     if wasAway ~= self.cursorAway or wasHolding ~= (self.returnHold ~= nil) then
         self.notify(self.returnHold and "Hold the cursor still to continue."
             or self.cursorAway and "Cursor moved. Put it back where it was to continue."
-            or self.status, self.completed, #self.plan.items)
+            or self.status, self:Completed(), #self.plan.items)
     end
     if self.cursorAway and self:StateInfo().cursor then
         self.age = 0
@@ -104,7 +104,6 @@ function Placement:IsNewCopy(item)
         and (item.decorID == nil or item.decorID == self.source.decorID)
 end
 
--- The first copy shows whether new copies cover the cursor; read in Basic mode, as it was placed.
 function Placement:NextCopy()
     local hovered = self.api:Hovered()
     local newCopy = self:IsNewCopy(hovered)
@@ -208,7 +207,7 @@ function Placement:UpdateAsideSelection(elapsed)
         self.lastRejectedGUID = guid
         self.notify((guid == self.source.decorGUID and "That is the original item under the copy. "
             or "That is not the new copy. ") .. "Click the new copy without moving the mouse.",
-            self.completed, #self.plan.items)
+            self:Completed(), #self.plan.items)
     end
 end
 
