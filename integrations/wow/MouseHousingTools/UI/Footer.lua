@@ -5,6 +5,13 @@ MHT.Footer = Footer
 
 -- The main window's bottom bar.
 
+local function formatTime(seconds)
+    local rounded = math.max(0, math.ceil(seconds))
+    if rounded < 60 then return rounded .. "s" end
+    if rounded < 3600 then return string.format("%dm %02ds", math.floor(rounded / 60), rounded % 60) end
+    return string.format("%dh %02dm", math.floor(rounded / 3600), math.floor(rounded / 60) % 60)
+end
+
 function Footer.New(window, parent)
     local self = setmetatable({}, Footer)
     local UI = MHT.UI
@@ -12,6 +19,19 @@ function Footer.New(window, parent)
     frame:SetPoint("TOPLEFT", 18, -628)
     self.frame = frame
     self.count = UI.Heading(frame, "", 14, 12, 180)
+    self.time = UI.Muted(frame, "", 14, 34, 200)
+    MHT.Theme.Font(self.time, "value")
+    local timeHint = CreateFrame("Frame", nil, frame)
+    timeHint:SetPoint("TOPLEFT", 10, -30)
+    timeHint:SetSize(200, 20)
+    timeHint:EnableMouse(true)
+    UI.Tooltip(timeHint, "Time", "The addon's own work at the measured editor speeds. Clicking copies and waiting for WoW can add time.")
+    self.progress = UI.Bar(frame, 560, MHT.Theme.Colors.rail)
+    self.progress:SetPoint("TOPLEFT", 14, -52)
+    self.progress:EnableMouse(true)
+    UI.Tooltip(self.progress, "Progress", "Copies made while preparing, then finished items and the current item's move. An item counts once WoW saves it.")
+    self.progressFill = UI.Bar(self.progress, 560, MHT.Theme.Colors.gold)
+    self.progressFill:SetPoint("LEFT", 0, 0)
     self.pile = UI.Check(frame, "Use existing pile", 230, 22, false, function(checked) window:UseExistingPile(checked) end)
     self.pile:SetLabelWidth(150)
     MHT.Theme.Font(self.pile.label, "secondary")
@@ -28,6 +48,15 @@ end
 
 function Footer:SetCount(text)
     self.count:SetText(text)
+end
+
+function Footer:SetTime(seconds)
+    self.time:SetText(seconds and "Time: " .. formatTime(seconds) or "Time: —")
+end
+
+function Footer:SetProgress(fraction)
+    self.progress:SetShown(fraction ~= nil)
+    self.progressFill:SetFraction(fraction or 0)
 end
 
 function Footer:SetStatus(message)

@@ -288,6 +288,34 @@ function Placement:UpdateAsideSettle()
     end
 end
 
+-- Time
+
+local function frames(count)
+    return count / math.max(1, GetFramerate() or 60)
+end
+
+function Placement.PrepareSeconds(count)
+    return SOURCE_HOLD + count * COPY_DELAY
+end
+
+function Placement:PileCount()
+    if self.pile ~= "aside" then return self.copiesCreated end
+    local count = 0
+    for _ in pairs(self.inPile) do count = count + 1 end
+    return count
+end
+
+function Placement:PrepareRemaining()
+    local perCopy = COPY_DELAY
+    if self.pile == "aside" then
+        local shift = self.asideTotal or MHT.ItemProfiles.AsideStep(self.source.decorID)
+        perCopy = perCopy + MHT.Motion.Seconds(MHT.Motion.Phases(shift, MHT.Motion.StandardProfile))
+            + frames(ASIDE_SWITCH_FRAMES + ASIDE_SETTLE_FRAMES)
+    end
+    local hold = self.state == "arming" and math.max(0, SOURCE_HOLD - self.still) or 0
+    return hold + (#self.plan.items - self:PileCount()) * perCopy
+end
+
 -- States
 
 State.arming = { waits = true, update = Placement.UpdateArming }

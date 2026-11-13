@@ -356,6 +356,48 @@ function Placement:PausedSaveFailed(event)
     self:PauseNow()
 end
 
+-- Time
+
+function Placement.ItemSeconds(plan, decorID)
+    local item, seconds = MHT.ItemProfiles.Calibration(decorID), {}
+    for i, target in ipairs(plan.items) do seconds[i] = MHT.Motion.Seconds(MHT.Motion.MovePhases(target, item)) end
+    return seconds
+end
+
+function Placement:ItemTimes()
+    local decorID = self.source and self.source.decorID or self.plan.requires or MHT.ItemProfiles.DEFAULT_DECOR_ID
+    if self.itemTimesFor ~= decorID then
+        self.itemTimes, self.itemTimesFor = Placement.ItemSeconds(self.plan, decorID), decorID
+    end
+    return self.itemTimes
+end
+
+function Placement:ItemRemaining(index)
+    local item = self.items[index]
+    if DONE[item.state] or item.onSaved == "saved" then return 0 end
+    if item.state == "moving" then return self.motion:RemainingSeconds() end
+    if item.checkpoint then return MHT.Motion.Seconds(item.checkpoint) end
+    return self:ItemTimes()[index]
+end
+
+function Placement:BuildRemaining()
+    local remaining = 0
+    for i = 1, #self.items do remaining = remaining + self:ItemRemaining(i) end
+    return remaining
+end
+
+function Placement:BuildProgress()
+    local times, done = self:ItemTimes(), 0
+    for i = 1, #self.items do
+        if DONE[self.items[i].state] then
+            done = done + 1
+        elseif times[i] > 0 then
+            done = done + math.max(0, 1 - self:ItemRemaining(i) / times[i])
+        end
+    end
+    return done / #self.items
+end
+
 -- Reloading
 
 function Placement:SaveBuild()
@@ -379,6 +421,7 @@ function Placement:RestoreBuild(saved)
     if not item then return nil end
     self.stage, self.fromPile, self.source = "building", saved.fromPile, copy(saved.source)
     self.pauseRequested, self.activeGUID, self.lastRejectedGUID, self.modeRequest = false, nil, nil, nil
+    self.itemTimesFor = nil
     if item.state == "moving" then
         setItem(item, item.checkpoint and "stopped" or "undone", { guid = item.guid, checkpoint = item.checkpoint })
     elseif item.state == "saving" then
