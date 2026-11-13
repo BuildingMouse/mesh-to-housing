@@ -95,7 +95,7 @@ function Placement:Start(plan, stage)
     self.fromPile = stage == "building"
     self:ResetItems(#plan.items)
     self.pauseRequested = false
-    self.source = nil
+    self.source, self.itemTimesFor = nil, nil
     self.modeRequest = nil
     self.activeGUID, self.lastRejectedGUID = nil, nil
     self:ResetPreparation()
@@ -109,6 +109,25 @@ function Placement:Start(plan, stage)
         self:SetState("arming", "Hover the item to copy and hold the cursor still.")
     end
     return true
+end
+
+function Placement.Estimate(plan, fromPile)
+    local seconds = 0
+    for _, item in ipairs(Placement.ItemSeconds(plan, plan.requires or MHT.ItemProfiles.DEFAULT_DECOR_ID)) do
+        seconds = seconds + item
+    end
+    if not fromPile then seconds = seconds + Placement.PrepareSeconds(#plan.items) end
+    return seconds
+end
+
+function Placement:RemainingSeconds()
+    if self.stage == "preparing" then return self:PrepareRemaining() + self:BuildRemaining() end
+    return self:BuildRemaining()
+end
+
+function Placement:Progress()
+    if self.stage == "preparing" then return self:PileCount() / #self.items end
+    return self:BuildProgress()
 end
 
 function Placement:UseSource(item)

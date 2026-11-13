@@ -54,12 +54,28 @@ function Motion.Phases(edit, profile)
     return result
 end
 
+local function longest(controls)
+    local duration = 0
+    for _, control in ipairs(controls) do duration = math.max(duration, control.duration) end
+    return duration
+end
+
+function Motion.Seconds(phases)
+    local total = 0
+    for _, phase in ipairs(phases) do total = total + PHASE_WAIT + longest(phase.controls) end
+    return total
+end
+
+function Motion.MovePhases(target, item)
+    return Motion.Phases(MHT.Maneuver.For(target, item), Motion.StandardProfile)
+end
+
 function Motion.New(api)
     return setmetatable({ api = api, active = {} }, Motion)
 end
 
 function Motion:MoveTo(target, item, guid, done, onPhase)
-    self:Begin(Motion.Phases(MHT.Maneuver.For(target, item), Motion.StandardProfile), guid, done, onPhase)
+    self:Begin(Motion.MovePhases(target, item), guid, done, onPhase)
 end
 
 function Motion:Shift(shift, guid, done)
@@ -103,6 +119,17 @@ function Motion:Stop()
         pcall(self.api.Increment, self.api, name, false)
     end
     self.active, self.queue, self.phase = {}, nil, nil
+end
+
+function Motion:RemainingSeconds()
+    if not self.queue then return 0 end
+    local current = 0
+    if self.phase and self.phase.started then
+        for _, remaining in pairs(self.active) do current = math.max(current, remaining) end
+    elseif self.phase then
+        current = (self.phase.wait or PHASE_WAIT) + longest(self.phase.controls)
+    end
+    return current + Motion.Seconds(self.queue)
 end
 
 function Motion:PreparingPhase()

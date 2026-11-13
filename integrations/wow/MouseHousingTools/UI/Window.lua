@@ -193,11 +193,18 @@ function Window:OnPlacementMessage(message, completed, total)
 end
 
 function Window:UpdateProgress(reset)
-    local placement = self.placement
+    local placement, footer = self.placement, self.footer
     local running = not reset and (placement:Busy() or placement:HasSession()) and placement.plan ~= nil
     local plan = running and placement.plan or self.plan
     local total = plan and #plan.items or 0
-    self.footer:SetCount(self:CountText(total, running))
+    footer:SetCount(self:CountText(total, running))
+    if running then
+        footer:SetTime(placement:RemainingSeconds())
+        footer:SetProgress(not placement:Ready() and placement:Progress() or nil)
+    else
+        footer:SetTime(plan and MHT.Placement.Estimate(plan, self.useExistingPile))
+        footer:SetProgress(nil)
+    end
 end
 
 function Window:CountText(total, running)
