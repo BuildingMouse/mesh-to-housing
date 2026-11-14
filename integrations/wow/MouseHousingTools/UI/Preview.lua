@@ -6,6 +6,29 @@ MHT.Preview = Preview
 -- Draws a plan's items as outlines (or points) in a turnable 3D view.
 
 local SOURCE_OPACITY, SEAM_OPACITY = 0.12, 0.3
+local MIN_ZOOM, MAX_ZOOM = 0.2, 8
+
+-- Each kind of plan starts from its own angle.
+local VIEWS = {
+    stairs = { yaw = -0.80, pitch = 0.25, coverage = 0.65, x = 0.58, y = 0.42 },
+    circle = { yaw = 0, pitch = 0.45, coverage = 0.52, x = 0.50, y = 0.34 },
+    vertical = { yaw = -0.20, pitch = 0.30, coverage = 0.65, x = 0.50, y = 0.42 },
+    model = { yaw = -0.60, pitch = 0.55, coverage = 0.72, x = 0.50, y = 0.50 },
+}
+
+local ROOM_LINES = {
+    outline = { room = true, opacity = 0.13 },
+    grid = { room = true, opacity = 0.045 },
+    wall = { room = true, opacity = 0.10 },
+    arrow = { room = true, opacity = 0.22 },
+}
+
+-- How previews look during the build
+local ITEM_LOOKS = {
+    placing = { color = "placing", thickness = 2.5, opacity = 1, seams = 1, dot = 8 },
+    built = { color = "preview", thickness = 1.5, opacity = 1, seams = SEAM_OPACITY, dot = 6 },
+    waiting = { color = "preview", thickness = 1, opacity = 0.55, seams = SEAM_OPACITY, dot = 5 },
+}
 
 -- The item's outline from Items; placements of other items use their logged shape.
 local function outline(plan, item)
@@ -14,7 +37,7 @@ local function outline(plan, item)
 end
 
 function Preview.New(parent, compact)
-    local self = setmetatable({ lines = {}, points = {}, compact = compact, yaw = -0.6, pitch = 0.55 }, Preview)
+    local self = setmetatable({ lines = {}, points = {}, compact = compact }, Preview)
     self.frame = MHT.UI.Surface(parent, 490, 390, "window")
     self.frame:SetClipsChildren(true)
     self.originDot = self.frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
@@ -22,17 +45,20 @@ function Preview.New(parent, compact)
     self.originDot:SetText("●")
     self.originDot:SetTextColor(unpack(MHT.Theme.Colors.muted))
     self.frame:SetScript("OnSizeChanged", function() self:Draw() end)
+    self:ResetView()
     if compact then
         self.frame:EnableMouse(false)
         return self
     end
     self.frame:EnableMouse(true)
+    self.frame:EnableMouseWheel(true)
+    self.frame:SetScript("OnMouseWheel", function(_, delta) self:Zoom(delta > 0 and 1.1 or 1 / 1.1) end)
     self.frame:SetScript("OnMouseDown", function(_, button)
-        if button == "LeftButton" then
-            local x, y = GetCursorPosition()
-            self.drag = { x = x, y = y, yaw = self.yaw, pitch = self.pitch }
-            self.lastX, self.lastY = x, y
-        end
+        if button ~= "LeftButton" and button ~= "RightButton" then return end
+        local x, y = GetCursorPosition()
+        self.drag = { x = x, y = y, yaw = self.yaw, pitch = self.pitch, panX = self.panX, panY = self.panY,
+            pan = button == "RightButton" }
+        self.lastX, self.lastY = x, y
     end)
     self.frame:SetScript("OnMouseUp", function() self.drag = nil end)
     self.frame:SetScript("OnHide", function() self.drag = nil end)
@@ -42,17 +68,67 @@ function Preview.New(parent, compact)
         local x, y = GetCursorPosition()
         if self.lastX == x and self.lastY == y then return end
         self.lastX, self.lastY = x, y
-        self.yaw = drag.yaw + (x - drag.x) / 180
-        self.pitch = math.max(0.15, math.min(1.4, drag.pitch + (y - drag.y) / 180))
+        if drag.pan then
+            local scale = self.frame:GetEffectiveScale()
+            self.panX, self.panY = drag.panX + (x - drag.x) / scale, drag.panY + (y - drag.y) / scale
+        else
+            self.yaw = drag.yaw + (x - drag.x) / 180
+            self.pitch = math.max(0.15, math.min(1.4, drag.pitch + (y - drag.y) / 180))
+        end
         self:Draw()
     end)
     return self
 end
 
--- With `points`, each item is drawn as a dot at its center.
-function Preview:SetPlan(plan, points)
-    self.plan, self.pointMode = plan, points
+function Preview:View()
+    return not self.compact and VIEWS[self.view] or VIEWS.model
+end
+
+function Preview:Center(w, h)
+    if self.compact then return w / 2, h / 2 end
+    local view = self:View()
+    return w * view.x, h * view.y
+end
+
+function Preview:ResetView()
+    local view = self:View()
+    self.yaw, self.pitch, self.zoom, self.panX, self.panY, self.drag = view.yaw, view.pitch, 1, 0, 0, nil
     self:Draw()
+end
+
+-- Zooms toward the cursor.
+function Preview:Zoom(factor)
+    local previous = self.zoom
+    self.zoom = math.max(MIN_ZOOM, math.min(MAX_ZOOM, self.zoom * factor))
+    local left, bottom = self.frame:GetLeft(), self.frame:GetBottom()
+    if left and bottom then
+        local scale = self.frame:GetEffectiveScale()
+        local x, y = GetCursorPosition()
+        local centerX, centerY = self:Center(self.frame:GetWidth(), self.frame:GetHeight())
+        x, y = x / scale - left - centerX, y / scale - bottom - centerY
+        local ratio = self.zoom / previous
+        self.panX, self.panY = x - (x - self.panX) * ratio, y - (y - self.panY) * ratio
+    end
+    self:Draw()
+end
+
+function Preview:SetPlan(plan, points, view)
+    local changed = view ~= self.view
+    self.plan, self.pointMode, self.view = plan, points, view
+    if changed then self:ResetView() else self:Draw() end
+end
+
+function Preview:SetRoom(id)
+    self.roomID = id
+    self:Draw()
+end
+
+function Preview:SetItemLooks(looks)
+    local previous = self.itemLooks or {}
+    local changed = #looks ~= #previous
+    for index, look in ipairs(looks) do changed = changed or previous[index] ~= look end
+    self.itemLooks = looks
+    if changed then self:Draw() end
 end
 
 function Preview:Draw()
@@ -72,56 +148,100 @@ function Preview:Draw()
     end
 
     local source = not self.compact and plan.source
+    local looks = {}
+    for index, look in ipairs(self.itemLooks or {}) do
+        if plan.items[index] then looks[plan.items[index]] = ITEM_LOOKS[look] end
+    end
     local items, low, high = {}, { math.huge, math.huge }, { -math.huge, -math.huge }
     -- Without a source item, keep the origin in view for its dot.
     if source then items[1] = source else low, high = { 0, 0 }, { 0, 0 } end
     for _, item in ipairs(plan.items) do items[#items + 1] = item end
-    local function include(p)
+    local world = { low = { math.huge, math.huge, math.huge }, high = { -math.huge, -math.huge, -math.huge } }
+    local function include(vertex, p)
         for a = 1, 2 do low[a], high[a] = math.min(low[a], p[a]), math.max(high[a], p[a]) end
+        for a = 1, 3 do
+            world.low[a], world.high[a] = math.min(world.low[a], vertex[a]), math.max(world.high[a], vertex[a])
+        end
     end
-    local shapes = {}
+    local shapes, floor = {}, nil
     for _, item in ipairs(items) do
-        local center = project({ item.x, item.y, item.z })
-        local drawn = { center = center, source = item == source }
-        include(center)
+        local center = { item.x, item.y, item.z }
+        local drawn = { center = project(center), source = item == source, look = looks[item] }
+        include(center, drawn.center)
         if not self.pointMode then
             local vertices, edges, faces = outline(plan, item)
             drawn.edges, drawn.faces = edges, faces
             for _, vertex in ipairs(vertices or {}) do
                 local offset = MHT.Rotation.Apply(item.rotation,
                     { x = vertex.x * item.scale, y = vertex.y * item.scale, z = vertex.z * item.scale })
-                local p = project({ item.x + offset.x, item.y + offset.y, item.z + offset.z })
+                local point = { item.x + offset.x, item.y + offset.y, item.z + offset.z }
+                local p = project(point)
                 drawn[#drawn + 1] = p
-                include(p)
+                include(point, p)
+                if item == source then floor = math.min(floor or math.huge, point[3]) end
             end
         end
         shapes[#shapes + 1] = drawn
     end
 
-    local margin = self.compact and 16 or 70
-    local scale = math.min((w - margin) / math.max(0.01, high[1] - low[1]),
-        (h - margin) / math.max(0.01, high[2] - low[2]))
+    local view = self:View()
+    local width = self.compact and w - 16 or w * view.coverage
+    local height = self.compact and h - 16 or h * view.coverage
+    local scale = math.min(width / math.max(0.01, high[1] - low[1]),
+        height / math.max(0.01, high[2] - low[2])) * self.zoom
+    local centerX, centerY = self:Center(w, h)
     local function screen(p)
-        return w / 2 + (p[1] - (low[1] + high[1]) / 2) * scale,
-               h / 2 + (p[2] - (low[2] + high[2]) / 2) * scale
+        return centerX + (p[1] - (low[1] + high[1]) / 2) * scale + self.panX,
+               centerY + (p[2] - (low[2] + high[2]) / 2) * scale + self.panY
     end
-    local color = MHT.Theme.Colors.preview
+    local function toScreen(vertex)
+        local p = project(vertex)
+        local x, y = screen(p)
+        return { x, y, p[3] * scale }
+    end
+
+    local extra = {}
+    local room = not self.compact and MHT.Rooms.Get(self.roomID)
+    floor = floor or world.low[3]
+    if room then
+        local middle = source and { 0, 0 }
+            or { (world.low[1] + world.high[1]) / 2, (world.low[2] + world.high[2]) / 2 }
+        for _, line in ipairs(MHT.Rooms.Lines(room, middle, floor, self.yaw)) do
+            extra[#extra + 1] = { a = toScreen(line.a), b = toScreen(line.b), owner = ROOM_LINES[line.style] }
+        end
+    end
+    if not self.compact and plan.dimensions then
+        -- An arrow on the floor in front of the start shows which way is forward.
+        local d = plan.dimensions
+        local size = math.min(d[1], d[2]) * 0.45
+        local y, z = -d[2] / 2 - size * 0.75 - 0.05, floor + 0.002
+        local tail, tip = { 0, y - size / 2, z }, { 0, y + size / 2, z }
+        local back = tip[2] - size * 0.22
+        for _, line in ipairs({ { tail, tip }, { tip, { -size * 0.18, back, z } }, { tip, { size * 0.18, back, z } } }) do
+            extra[#extra + 1] = { a = toScreen(line[1]), b = toScreen(line[2]), owner = ROOM_LINES.arrow }
+        end
+    end
+
+    local colors = MHT.Theme.Colors
+    local outlines = {}
     if self.pointMode then
         for i, drawn in ipairs(shapes) do
             local point = self.points[i]
             if not point then
                 point = self.frame:CreateTexture(nil, "ARTWORK")
-                point:SetSize(5, 5)
                 self.points[i] = point
             end
             local x, y = screen(drawn.center)
-            point:SetColorTexture(color[1], color[2], color[3], color[4] * (drawn.source and SOURCE_OPACITY or 1))
+            local look = drawn.look
+            local color = look and colors[look.color] or colors.preview
+            local opacity = drawn.source and SOURCE_OPACITY or look and look.opacity or 1
+            point:SetSize(look and look.dot or 5, look and look.dot or 5)
+            point:SetColorTexture(color[1], color[2], color[3], color[4] * opacity)
             point:ClearAllPoints()
             point:SetPoint("CENTER", self.frame, "BOTTOMLEFT", x, y)
             point:Show()
         end
     else
-        local outlines = {}
         for _, drawn in ipairs(shapes) do
             if drawn.faces then
                 local vertices = {}
@@ -130,24 +250,27 @@ function Preview:Draw()
                     vertices[i] = { x, y, p[3] * scale }
                 end
                 outlines[#outlines + 1] = { vertices = vertices, faces = drawn.faces, edges = drawn.edges,
-                    source = drawn.source }
+                    source = drawn.source, look = drawn.look }
             end
-        end
-        for index, segment in ipairs(MHT.HiddenLines.Visible(outlines, w, h)) do
-            local line = self.lines[index]
-            if not line then
-                line = self.frame:CreateLine(nil, "ARTWORK")
-                self.lines[index] = line
-            end
-            line:SetStartPoint("BOTTOMLEFT", self.frame, segment.a[1], segment.a[2])
-            line:SetEndPoint("BOTTOMLEFT", self.frame, segment.b[1], segment.b[2])
-            line:SetThickness(segment.seam and 0.75 or 1)
-            line:SetColorTexture(color[1], color[2], color[3], color[4]
-                * (segment.owner.source and SOURCE_OPACITY or 1) * (segment.seam and SEAM_OPACITY or 1))
-            line:Show()
         end
     end
-    if self.compact or source then return end
+    for index, segment in ipairs(MHT.HiddenLines.Visible(outlines, w, h, extra)) do
+        local line = self.lines[index]
+        if not line then
+            line = self.frame:CreateLine(nil, "ARTWORK")
+            self.lines[index] = line
+        end
+        local owner, look = segment.owner, segment.owner.look
+        local color = owner.room and colors.room or look and colors[look.color] or colors.preview
+        local opacity = owner.room and owner.opacity or owner.source and SOURCE_OPACITY or look and look.opacity or 1
+        if segment.seam then opacity = opacity * (look and look.seams or SEAM_OPACITY) end
+        line:SetStartPoint("BOTTOMLEFT", self.frame, segment.a[1], segment.a[2])
+        line:SetEndPoint("BOTTOMLEFT", self.frame, segment.b[1], segment.b[2])
+        line:SetThickness(look and look.thickness or (owner.room or segment.seam) and 0.75 or 1)
+        line:SetColorTexture(color[1], color[2], color[3], color[4] * opacity)
+        line:Show()
+    end
+    if self.compact or source or room then return end
     local x, y = screen(project({ 0, 0, 0 }))
     self.originDot:ClearAllPoints()
     self.originDot:SetPoint("CENTER", self.frame, "BOTTOMLEFT", x, y)

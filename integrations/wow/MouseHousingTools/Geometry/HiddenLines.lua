@@ -2,7 +2,8 @@ local _, MHT = ...
 local HiddenLines = {}
 MHT.HiddenLines = HiddenLines
 
--- The visible parts of convex shapes' edges, in screen space with depth growing toward the viewer.
+-- The visible parts of convex shapes' edges and of any extra lines, in screen space with depth
+-- growing toward the viewer.
 
 local EPSILON, CELL, MIN_SEGMENT = 1e-5, 24, 0.25
 
@@ -159,7 +160,7 @@ local function intersection(left, right)
     return a, b
 end
 
-function HiddenLines.Visible(shapes, width, height)
+function HiddenLines.Visible(shapes, width, height, lines)
     local grid, items, columns = {}, {}, math.max(1, math.ceil(width / CELL))
     local rows = math.max(1, math.ceil(height / CELL))
     local function cells(x1, y1, x2, y2)
@@ -267,6 +268,7 @@ function HiddenLines.Visible(shapes, width, height)
             end
         end
     end
+    for _, line in ipairs(lines or {}) do visible(line.a, line.b, line.owner) end
     for _, item in ipairs(items) do
         local low, high = { item.minX, item.minY, item.minZ }, { item.maxX, item.maxY, item.maxZ }
         for _, other in ipairs(candidates(low, high, item.owner)) do

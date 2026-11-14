@@ -38,6 +38,7 @@ Dev\Calibration.lua
 Dev\ResizeCalibration.lua
 UI\Theme.lua
 UI\UI.lua
+UI\Rooms.lua
 UI\Preview.lua
 UI\Tabs\ShapePanel.lua
 UI\Tabs\ModelPicker.lua

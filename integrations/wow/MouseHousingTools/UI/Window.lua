@@ -85,8 +85,26 @@ function Window:CreatePreview()
     UI.Heading(panel, "Preview", 14, 14, 270)
     self.preview = MHT.Preview.New(panel)
     self.preview.frame:SetPoint("TOPLEFT", 14, -44)
-    self.preview.frame:SetSize(560, 454)
+    self.preview.frame:SetSize(560, 410)
     MHT.Theme.Skin(self.preview.frame, nil)
+
+    local rooms = {}
+    for _, room in ipairs(MHT.Rooms.Entries) do rooms[#rooms + 1] = { id = room.id, name = "Room: " .. room.name } end
+    rooms[#rooms + 1] = { id = "none", name = "Room: None" }
+    local roomID = self.uiState.previewRoom
+    if roomID ~= "none" and not MHT.Rooms.Get(roomID) then roomID = MHT.Rooms.DEFAULT_ID end
+    self.uiState.previewRoom = roomID
+    local picker = UI.Dropdown(panel, 14, 470, 166, rooms, roomID, function(id)
+        self.uiState.previewRoom = id
+        self.preview:SetRoom(id)
+    end)
+    picker.menu:ClearAllPoints()
+    picker.menu:SetPoint("BOTTOMLEFT", picker, "TOPLEFT", 0, 2)
+    UI.Tooltip(picker, "Preview room",
+        "Small is twice as wide as Tiny, Medium three times and Large four times. All rooms are as high as Tiny.")
+    self.preview:SetRoom(roomID)
+    local reset = UI.ResetButton(panel, 550, 472, function() self.preview:ResetView() end)
+    UI.Tooltip(reset, "Reset view", "Drag to turn the preview, right-drag to move it, and scroll to zoom.")
 end
 
 -- A build paused before a /reload comes back paused.
@@ -124,10 +142,17 @@ function Window:Refresh()
     self.settingsPanel:Refresh()
     local plan, reason = self.settingsPanel:Plan()
     self.plan = plan
-    self.preview:SetPlan(plan, self.settingsPanel:Section().points)
+    self.preview:SetPlan(plan, self.settingsPanel:Section().points, self:PreviewView())
     self:UpdateProgress(true)
     self:SetStatus(plan and self:StartHint(#plan.items) or reason or "")
     self:UpdateControls()
+end
+
+function Window:PreviewView()
+    if self.mode ~= "shapes" then return "model" end
+    local shape = self.settings.shape
+    if shape == "circle" and self.settings.circle.orientation == "vertical" then return "vertical" end
+    return shape
 end
 
 function Window:StartHint(count)
@@ -201,10 +226,23 @@ function Window:UpdateProgress(reset)
     if running then
         footer:SetTime(placement:RemainingSeconds())
         footer:SetProgress(not placement:Ready() and placement:Progress() or nil)
+        self.preview:SetItemLooks(self:ItemLooks())
     else
+        self.preview:SetItemLooks({})
         footer:SetTime(plan and MHT.Placement.Estimate(plan, self.useExistingPile))
         footer:SetProgress(nil)
     end
+end
+
+-- The current item stays highlighted between moves, so the preview always shows what comes next.
+function Window:ItemLooks()
+    local placement, looks = self.placement, {}
+    if placement.stage ~= "building" then return looks end
+    local _, current = placement:Current()
+    for index, item in ipairs(placement.items) do
+        looks[index] = index == current and "placing" or item.state == "saved" and "built" or "waiting"
+    end
+    return looks
 end
 
 function Window:CountText(total, running)
