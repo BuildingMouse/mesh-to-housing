@@ -24,7 +24,9 @@ function UI.Text(parent, text, x, y, width, font)
 end
 
 function UI.Heading(parent, text, x, y, width)
-    return UI.Text(parent, text, x, y, width, "GameFontNormal")
+    local label = UI.Text(parent, text, x, y, width, "GameFontNormal")
+    label:SetTextColor(unpack(Colors.heading))
+    return label
 end
 
 function UI.Muted(parent, text, x, y, width)
@@ -409,9 +411,9 @@ function UI.Check(parent, label, x, y, checked, onChange)
     button:SetPoint("TOPLEFT", x, -y)
     button:SetSize(24, 24)
     local box = UI.Surface(button, 18, 18, "check")
-    box:SetPoint("CENTER", 0, 0)
+    box:SetPoint("LEFT", 0, 0)
     box:SetFrameLevel(math.max(0, button:GetFrameLevel() - 1))
-    local mark = Theme.Icon(button, "check", 14)
+    local mark = Theme.Icon(box, "check", 14)
     local text = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     Theme.Font(text, "label")
     text:SetTextColor(unpack(Colors.text))

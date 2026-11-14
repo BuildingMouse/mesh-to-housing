@@ -11,7 +11,7 @@ local IMPORT_LATER = "Import codes are coming later. Choose Library to use a sav
 function ModelPicker.New(window, parent, width, options)
     local self = setmetatable({ window = window, container = options.container, selection = window.modelSettings,
         details = options.details, cards = {} }, ModelPicker)
-    local UI, Theme, track = MHT.UI, MHT.Theme, options.track
+    local UI, track = MHT.UI, options.track
 
     UI.Heading(parent, "Model", 0, 0, width)
     if options.onReset then
@@ -32,14 +32,10 @@ function ModelPicker.New(window, parent, width, options)
         thumbnail.frame:SetPoint("TOPLEFT", 12, -12)
         thumbnail.frame:SetSize(68, 68)
         thumbnail:SetPlan((Library.Build(entry.id, 1, (MHT.ItemProfiles.Dimensions(entry.decorID)))))
-        local check = CreateFrame("Frame", nil, card)
-        check:SetPoint("TOPLEFT", 296, -36)
-        check:SetSize(24, 24)
-        Theme.Icon(check, "check", 14):SetVertexColor(unpack(Theme.Colors.gold))
         local name = UI.Text(card, entry.name, 94, self.details and 26 or 39, 190)
         local detail = UI.Muted(card, string.format("%d points", entry.count), 94, 48, 190)
         detail:SetShown(self.details == true)
-        self.cards[#self.cards + 1] = { id = entry.id, button = card, check = check, name = name }
+        self.cards[#self.cards + 1] = { id = entry.id, button = card, name = name }
     end
     self.bottom = 78 + #Library.Entries * 104
 
@@ -83,8 +79,6 @@ function ModelPicker:UpdateControls()
     self.libraryButton:SetSelected(self.selection.source == "library")
     self.importButton:SetSelected(self.selection.source == "import")
     for _, card in ipairs(self.cards) do
-        local selected = card.id == self.selection.id
-        card.button:SetSelected(selected)
-        card.check:SetShown(selected)
+        card.button:SetSelected(card.id == self.selection.id)
     end
 end

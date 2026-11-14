@@ -149,9 +149,13 @@ function Window:Refresh()
 end
 
 function Window:PreviewView()
-    if self.mode ~= "shapes" then return "model" end
+    if self.mode ~= "shapes" then return self.mode end
     local shape = self.settings.shape
     if shape == "circle" and self.settings.circle.orientation == "vertical" then return "vertical" end
+    local stairs = self.settings.stairs
+    if shape == "stairs" and stairs.curveEnabled and stairs.curve ~= 0 then
+        return stairs.curve > 0 and "curveRight" or "curveLeft"
+    end
     return shape
 end
 

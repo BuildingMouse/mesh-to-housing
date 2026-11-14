@@ -179,7 +179,8 @@ function HiddenLines.Visible(shapes, width, height, lines)
                 for i, index in ipairs(indices) do edges[edgeKey(index, indices[i % #indices + 1])] = true end
             end
         end
-        if #front > 0 then
+        -- A see-through shape still draws its own front edges but hides nothing behind it.
+        if #front > 0 and not shape.seeThrough then
             local item = occluder(shape, front)
             item.order = #items + 1
             items[#items + 1] = item

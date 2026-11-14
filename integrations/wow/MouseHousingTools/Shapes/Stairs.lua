@@ -5,7 +5,7 @@ local Plan, Rotation = MHT.Plan, MHT.Rotation
 
 -- A positive curve turns right.
 
-Stairs.Defaults = { spacing = 0.8, stepX = 0, stepZ = 0.8 * math.tan(math.rad(30)),
+Stairs.Defaults = { spacing = 0.8, stepX = 0, stepZ = 0.44,
     curveEnabled = false, curve = 90, radius = 5 }
 
 Stairs.Ranges = { spacing = { 0, 100 }, stepX = { -100, 100 }, stepZ = { 0, 100 },

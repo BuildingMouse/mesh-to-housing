@@ -4,7 +4,7 @@ MHT.Theme = Theme
 
 Theme.Colors = {
     gold = { 1, 0.827, 0.125, 1 }, subtle = { 0.443, 0.545, 0.608, 0.16 },
-    text = { 0.906, 0.925, 0.925, 1 }, muted = { 0.596, 0.663, 0.682, 1 },
+    heading = { 1, 1, 1, 1 }, text = { 0.906, 0.925, 0.925, 1 }, muted = { 0.596, 0.663, 0.682, 1 },
     rail = { 0.30, 0.32, 0.34, 0.75 },
     preview = { 0.58, 0.71, 0.79, 0.92 },
     placing = { 0.90, 0.79, 0.38, 1 }, room = { 0.46, 0.57, 0.64, 1 },
@@ -12,7 +12,7 @@ Theme.Colors = {
 
 local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local FONTS = {
-    title = { FONT, 21 }, heading = { FONT, 16 }, label = { FONT, 14 },
+    title = { FONT, 21 }, heading = { FONT, 17 }, label = { FONT, 14 },
     value = { FONT, 13 }, secondary = { FONT, 12 },
 }
 

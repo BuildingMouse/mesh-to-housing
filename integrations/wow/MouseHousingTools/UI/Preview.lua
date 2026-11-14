@@ -6,20 +6,24 @@ MHT.Preview = Preview
 -- Draws a plan's items as outlines (or points) in a turnable 3D view.
 
 local SOURCE_OPACITY, SEAM_OPACITY = 0.12, 0.3
+local PILE_DOT = 10
 local MIN_ZOOM, MAX_ZOOM = 0.2, 8
 
 -- Each kind of plan starts from its own angle.
 local VIEWS = {
-    stairs = { yaw = -0.80, pitch = 0.25, coverage = 0.65, x = 0.58, y = 0.42 },
-    circle = { yaw = 0, pitch = 0.45, coverage = 0.52, x = 0.50, y = 0.34 },
+    stairs = { yaw = -0.80, pitch = 0.25, coverage = 0.65, x = 0.50, y = 0.45 },
+    curveRight = { yaw = -0.15, pitch = 0.30, coverage = 0.65, x = 0.50, y = 0.45 },
+    curveLeft = { yaw = 0.15, pitch = 0.30, coverage = 0.65, x = 0.50, y = 0.45 },
+    circle = { yaw = 0, pitch = 0.45, coverage = 0.52, x = 0.50, y = 0.42 },
     vertical = { yaw = -0.20, pitch = 0.30, coverage = 0.65, x = 0.50, y = 0.42 },
     model = { yaw = -0.60, pitch = 0.55, coverage = 0.72, x = 0.50, y = 0.50 },
 }
+VIEWS.sketch, VIEWS.sculpt = VIEWS.model, VIEWS.model
 
 local ROOM_LINES = {
-    outline = { room = true, opacity = 0.13 },
-    grid = { room = true, opacity = 0.045 },
-    wall = { room = true, opacity = 0.10 },
+    outline = { room = true, opacity = 0.22 },
+    grid = { room = true, opacity = 0.07 },
+    wall = { room = true, opacity = 0.16 },
     arrow = { room = true, opacity = 0.22 },
 }
 
@@ -44,7 +48,7 @@ function Preview.New(parent, compact)
     MHT.Theme.Font(self.originDot, "title")
     self.originDot:SetText("●")
     self.originDot:SetTextColor(unpack(MHT.Theme.Colors.muted))
-    self.frame:SetScript("OnSizeChanged", function() self:Draw() end)
+    self.frame:SetScript("OnSizeChanged", function() self.framing = nil; self:Draw() end)
     self:ResetView()
     if compact then
         self.frame:EnableMouse(false)
@@ -93,6 +97,7 @@ end
 function Preview:ResetView()
     local view = self:View()
     self.yaw, self.pitch, self.zoom, self.panX, self.panY, self.drag = view.yaw, view.pitch, 1, 0, 0, nil
+    self.framing = nil
     self:Draw()
 end
 
@@ -157,8 +162,15 @@ function Preview:Draw()
     if source then items[1] = source else low, high = { 0, 0 }, { 0, 0 } end
     for _, item in ipairs(plan.items) do items[#items + 1] = item end
     local world = { low = { math.huge, math.huge, math.huge }, high = { -math.huge, -math.huge, -math.huge } }
-    local function include(vertex, p)
+    local span = source and { low = { math.huge, math.huge, math.huge }, high = { -math.huge, -math.huge, -math.huge } }
+        or { low = { 0, 0, 0 }, high = { 0, 0, 0 } }
+    -- The room is placed around the plan's items, without the source.
+    local function include(vertex, p, isSource)
         for a = 1, 2 do low[a], high[a] = math.min(low[a], p[a]), math.max(high[a], p[a]) end
+        for a = 1, 3 do
+            span.low[a], span.high[a] = math.min(span.low[a], vertex[a]), math.max(span.high[a], vertex[a])
+        end
+        if isSource then return end
         for a = 1, 3 do
             world.low[a], world.high[a] = math.min(world.low[a], vertex[a]), math.max(world.high[a], vertex[a])
         end
@@ -166,8 +178,8 @@ function Preview:Draw()
     local shapes, floor = {}, nil
     for _, item in ipairs(items) do
         local center = { item.x, item.y, item.z }
-        local drawn = { center = project(center), source = item == source, look = looks[item] }
-        include(center, drawn.center)
+        local drawn = { center = project(center), source = item == source, look = looks[item], scale = item.scale }
+        include(center, drawn.center, drawn.source)
         if not self.pointMode then
             local vertices, edges, faces = outline(plan, item)
             drawn.edges, drawn.faces = edges, faces
@@ -177,22 +189,32 @@ function Preview:Draw()
                 local point = { item.x + offset.x, item.y + offset.y, item.z + offset.z }
                 local p = project(point)
                 drawn[#drawn + 1] = p
-                include(point, p)
+                include(point, p, drawn.source)
                 if item == source then floor = math.min(floor or math.huge, point[3]) end
             end
         end
         shapes[#shapes + 1] = drawn
     end
 
-    local view = self:View()
-    local width = self.compact and w - 16 or w * view.coverage
-    local height = self.compact and h - 16 or h * view.coverage
-    local scale = math.min(width / math.max(0.01, high[1] - low[1]),
-        height / math.max(0.01, high[2] - low[2])) * self.zoom
+    local framing = not self.compact and self.framing
+    if not framing then
+        local view = self:View()
+        local width = self.compact and w - 16 or w * view.coverage
+        local height = self.compact and h - 16 or h * view.coverage
+        local center = { (span.low[1] + span.high[1]) / 2, (span.low[2] + span.high[2]) / 2,
+            (span.low[3] + span.high[3]) / 2 }
+        local projected = project(center)
+        framing = { center = center,
+            scale = math.min(width / math.max(0.01, high[1] - low[1]), height / math.max(0.01, high[2] - low[2])),
+            shift = { (low[1] + high[1]) / 2 - projected[1], (low[2] + high[2]) / 2 - projected[2] } }
+        if not self.compact then self.framing = framing end
+    end
+    local scale = framing.scale * self.zoom
+    local focus = project(framing.center)
     local centerX, centerY = self:Center(w, h)
     local function screen(p)
-        return centerX + (p[1] - (low[1] + high[1]) / 2) * scale + self.panX,
-               centerY + (p[2] - (low[2] + high[2]) / 2) * scale + self.panY
+        return centerX + (p[1] - focus[1] - framing.shift[1]) * scale + self.panX,
+               centerY + (p[2] - focus[2] - framing.shift[2]) * scale + self.panY
     end
     local function toScreen(vertex)
         local p = project(vertex)
@@ -202,10 +224,10 @@ function Preview:Draw()
 
     local extra = {}
     local room = not self.compact and MHT.Rooms.Get(self.roomID)
-    floor = floor or world.low[3]
+    floor = floor or source and source.z or world.low[3]
     if room then
-        local middle = source and { 0, 0 }
-            or { (world.low[1] + world.high[1]) / 2, (world.low[2] + world.high[2]) / 2 }
+        local middle = #plan.items > 0
+            and { (world.low[1] + world.high[1]) / 2, (world.low[2] + world.high[2]) / 2 } or { 0, 0 }
         for _, line in ipairs(MHT.Rooms.Lines(room, middle, floor, self.yaw)) do
             extra[#extra + 1] = { a = toScreen(line.a), b = toScreen(line.b), owner = ROOM_LINES[line.style] }
         end
@@ -214,7 +236,9 @@ function Preview:Draw()
         -- An arrow on the floor in front of the start shows which way is forward.
         local d = plan.dimensions
         local size = math.min(d[1], d[2]) * 0.45
-        local y, z = -d[2] / 2 - size * 0.75 - 0.05, floor + 0.002
+        -- In point mode the arrow's tip touches the pile's point.
+        local y = self.pointMode and -size / 2 or -d[2] / 2 - size * 0.75 - 0.05
+        local z = floor + 0.002
         local tail, tip = { 0, y - size / 2, z }, { 0, y + size / 2, z }
         local back = tip[2] - size * 0.22
         for _, line in ipairs({ { tail, tip }, { tip, { -size * 0.18, back, z } }, { tip, { size * 0.18, back, z } } }) do
@@ -235,7 +259,10 @@ function Preview:Draw()
             local look = drawn.look
             local color = look and colors[look.color] or colors.preview
             local opacity = drawn.source and SOURCE_OPACITY or look and look.opacity or 1
-            point:SetSize(look and look.dot or 5, look and look.dot or 5)
+            -- Item size shows gently on points; placement still uses the exact scale.
+            local factor = math.max(0.6, math.min(1.5, 1 + (drawn.scale - 1) * 0.5))
+            local size = drawn.source and PILE_DOT or (look and look.dot or 5) * factor
+            point:SetSize(size, size)
             point:SetColorTexture(color[1], color[2], color[3], color[4] * opacity)
             point:ClearAllPoints()
             point:SetPoint("CENTER", self.frame, "BOTTOMLEFT", x, y)
@@ -250,7 +277,7 @@ function Preview:Draw()
                     vertices[i] = { x, y, p[3] * scale }
                 end
                 outlines[#outlines + 1] = { vertices = vertices, faces = drawn.faces, edges = drawn.edges,
-                    source = drawn.source, look = drawn.look }
+                    source = drawn.source, look = drawn.look, seeThrough = drawn.source }
             end
         end
     end

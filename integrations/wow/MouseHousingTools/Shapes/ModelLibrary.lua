@@ -38,8 +38,16 @@ function Library.Sketch(id, modelScale, itemScale, dimensions)
     if not validScale(itemScale) then return nil, "Point item size must be between 20% and 200%." end
     local plan, reason = Library.Build(id, 1, dimensions)
     if not plan then return nil, reason end
+    -- The model grows from the middle of its lowest points, so its bottom stays where it is next to the pile.
+    local z = math.huge
+    for _, item in ipairs(plan.items) do z = math.min(z, item.z) end
+    local x, y, count = 0, 0, 0
     for _, item in ipairs(plan.items) do
-        item.x, item.y, item.z = item.x * modelScale, item.y * modelScale, item.z * modelScale
+        if item.z - z < 1e-6 then x, y, count = x + item.x, y + item.y, count + 1 end
+    end
+    x, y = x / count, y / count
+    for _, item in ipairs(plan.items) do
+        item.x, item.y, item.z = x + (item.x - x) * modelScale, y + (item.y - y) * modelScale, z + (item.z - z) * modelScale
         item.rotation, item.scale = Rotation.Identity(), itemScale
     end
     plan.requires = nil
