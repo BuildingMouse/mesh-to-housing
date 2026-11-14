@@ -21,39 +21,7 @@ function Theme.Font(widget, role)
     widget:SetFont(font[1], font[2], "")
 end
 
-local GOLD = Theme.Colors.gold
-local EDGE, SUBTLE, CLEAR = { 0.443, 0.545, 0.608, 0.28 }, { 0.443, 0.545, 0.608, 0.16 }, { 0, 0, 0, 0 }
-local CONTROL, HOVER, ACTIVE = { 0.155, 0.165, 0.175, 0.92 }, { 0.240, 0.250, 0.260, 0.97 }, { 0.205, 0.215, 0.225, 0.97 }
-local DEEP, DISABLED = { 0.020, 0.055, 0.090, 0.42 }, { 0.12, 0.13, 0.14, 0.72 }
-local SKINS = {
-    window = { { 0.04, 0.085, 0.13, 0.94 }, { 0.443, 0.545, 0.608, 0.42 } },
-    panel = { { 0.06, 0.115, 0.17, 0.48 }, SUBTLE }, deep = { DEEP, SUBTLE },
-    settings = { { 0.06, 0.115, 0.17, 0.72 }, CLEAR }, footer = { { 0.055, 0.10, 0.14, 0.85 }, CLEAR },
-    menu = { { 0.06, 0.115, 0.17, 0.96 }, SUBTLE },
-    button = { CONTROL, EDGE }, buttonHover = { HOVER, EDGE }, buttonDown = { ACTIVE, EDGE },
-    primary = { { 0.40, 0.33, 0.16, 0.97 }, { 0.85, 0.69, 0.27, 0.9 } },
-    primaryHover = { { 0.48, 0.40, 0.20, 0.97 }, GOLD }, primaryDown = { { 0.34, 0.28, 0.13, 0.97 }, GOLD },
-    selected = { ACTIVE, GOLD }, selectedHover = { HOVER, GOLD },
-    disabled = { DISABLED, { 0.28, 0.30, 0.32, 0.40 } }, disabledSelected = { DISABLED, GOLD },
-    tab = { { 0.11, 0.14, 0.17, 0.94 }, CLEAR }, tabHover = { { 0.16, 0.20, 0.23, 0.97 }, CLEAR },
-    tabDown = { { 0.14, 0.18, 0.21, 0.97 }, CLEAR }, tabDisabled = { { 0.09, 0.12, 0.14, 0.85 }, CLEAR },
-    tabSelected = { { 0.15, 0.19, 0.22, 0.97 }, GOLD }, tabSelectedHover = { { 0.18, 0.22, 0.25, 0.97 }, GOLD },
-    tabSelectedDown = { { 0.14, 0.18, 0.21, 0.97 }, GOLD }, tabDisabledSelected = { { 0.15, 0.19, 0.22, 0.97 }, GOLD },
-    input = { DEEP, { 0.443, 0.545, 0.608, 0.12 } }, inputFocus = { DEEP, GOLD },
-    inputDisabled = { { 0.015, 0.035, 0.055, 0.80 }, { 0.443, 0.545, 0.608, 0.06 } },
-    scrollRail = { { 0.30, 0.32, 0.34, 0.35 }, CLEAR }, scrollThumb = { { 0.443, 0.545, 0.608, 0.42 }, CLEAR },
-    scrollThumbHover = { GOLD, CLEAR },
-}
-
-function Theme.Skin(frame, name)
-    if frame.skinName == name and frame.skinned then return end
-    frame.skinName, frame.skinned = name, true
-    local colors = name and SKINS[name]
-    if not colors then frame:SetBackdrop(nil); return end
-    frame:SetBackdrop({ bgFile = "Interface/Buttons/WHITE8X8", edgeFile = "Interface/Buttons/WHITE8X8", edgeSize = 1 })
-    frame:SetBackdropColor(unpack(colors[1]))
-    frame:SetBackdropBorderColor(unpack(colors[2]))
-end
+local MEDIA = "Interface\\AddOns\\MouseHousingTools\\Media\\"
 
 -- Keeps thin or scaled textures from shimmering as they move.
 function Theme.Unsnapped(texture)
@@ -61,32 +29,91 @@ function Theme.Unsnapped(texture)
     texture:SetTexelSnappingBias(0)
 end
 
-local ICONS = {
-    close = "Interface\\Buttons\\UI-StopButton",
-    check = "Interface\\Buttons\\UI-CheckBox-Check",
-    reset = "Interface\\Buttons\\UI-RefreshButton",
-    down = "Interface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up",
-    up = "Interface\\Buttons\\UI-ScrollBar-ScrollUpButton-Up",
-    right = "Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up",
+local PANEL = { size = 64, border = 16, inset = 8 }
+local CONTROL = { size = 64, border = 8, inset = 4 }
+local SCROLL = { size = 64, border = 8, inset = 4, vertical = true }
+local SKINS = {
+    window = PANEL, panel = PANEL, deep = PANEL, settings = PANEL, footer = PANEL,
+    menu = CONTROL, button = CONTROL, buttonHover = CONTROL, buttonDown = CONTROL,
+    primary = CONTROL, primaryHover = CONTROL, primaryDown = CONTROL,
+    selected = CONTROL, selectedHover = CONTROL, disabled = CONTROL, disabledSelected = CONTROL,
+    tab = CONTROL, tabHover = CONTROL, tabDown = CONTROL, tabDisabled = CONTROL,
+    tabSelected = CONTROL, tabSelectedHover = CONTROL, tabSelectedDown = CONTROL, tabDisabledSelected = CONTROL,
+    input = CONTROL, inputFocus = CONTROL, inputDisabled = CONTROL, check = CONTROL,
+    scrollRail = SCROLL, scrollThumb = SCROLL, scrollThumbHover = SCROLL,
 }
 
+local function layout(frame, skin)
+    local slices = skin.slices
+    local w, h = frame:GetWidth() or 0, frame:GetHeight() or 0
+    local cap = slices and math.min(slices.inset, w / 2, h / 2) or 0
+    local cut = slices and slices.border / slices.size or 0
+    local xs, ys, uv = { 0, cap, w - cap, w }, { 0, cap, h - cap, h }, { 0, cut, 1 - cut, 1 }
+    local vertical = slices and slices.vertical
+    local count = slices and (vertical and 3 or 9) or 0
+    for i, piece in ipairs(skin.pieces) do
+        local row = vertical and i or math.floor((i - 1) / 3) + 1
+        local column = vertical and 1 or (i - 1) % 3 + 1
+        local x, width = vertical and 0 or xs[column], vertical and w or xs[column + 1] - xs[column]
+        local height = i <= count and ys[row + 1] - ys[row] or 0
+        piece:SetShown(width > 0 and height > 0)
+        if height > 0 then
+            piece:ClearAllPoints()
+            piece:SetPoint("TOPLEFT", frame, "TOPLEFT", x, -ys[row])
+            piece:SetSize(width, height)
+            piece:SetTexCoord(vertical and 0 or uv[column], vertical and 1 or uv[column + 1], uv[row], uv[row + 1])
+        end
+    end
+end
+
+function Theme.Skin(frame, name)
+    local skin = frame.skin
+    if not skin then
+        skin = { pieces = {} }
+        frame.skin = skin
+        frame:HookScript("OnSizeChanged", function() layout(frame, skin) end)
+    elseif skin.name == name then
+        return
+    end
+    skin.name, skin.slices = name, name and SKINS[name]
+    for i = 1, skin.slices and (skin.slices.vertical and 3 or 9) or 0 do
+        if not skin.pieces[i] then
+            skin.pieces[i] = frame:CreateTexture(nil, "BACKGROUND")
+            Theme.Unsnapped(skin.pieces[i])
+        end
+        skin.pieces[i]:SetTexture(MEDIA .. "Skins\\" .. name .. ".tga")
+    end
+    layout(frame, skin)
+end
+
+-- Bars are drawn white at twice their width and 12 pixels tall, so cropping never stretches the rounded end.
+local BAR_TEXTURE_WIDTHS = { [106] = 256, [560] = 2048 }
+
+function Theme.Bar(texture, width)
+    texture:SetTexture(MEDIA .. "Bars\\" .. width .. ".tga")
+end
+
+function Theme.CropBar(texture, width, fraction)
+    texture:SetTexCoord(0, fraction * width * 2 / BAR_TEXTURE_WIDTHS[width], 0, 12 / 16)
+end
+
+Theme.THUMB = MEDIA .. "Thumb.tga"
+
+-- Icons are white, so they can take any color.
 function Theme.Icon(parent, name, size, x, y)
     local icon = parent:CreateTexture(nil, "OVERLAY")
     icon:SetPoint("CENTER", parent, "CENTER", x or 0, y or 0)
     icon:SetSize(size, size)
     Theme.Unsnapped(icon)
-    function icon:SetShape(value) self:SetTexture(ICONS[value]) end
+    function icon:SetShape(value) self:SetTexture(MEDIA .. "Icons\\" .. value .. ".tga") end
     icon:SetShape(name)
-    icon:SetDesaturated(true)
     icon:SetVertexColor(unpack(Theme.Colors.muted))
     return icon
 end
 
-local LOGO = "Interface\\AddOns\\MouseHousingTools\\Media\\Logo.tga"
-
 function Theme.Logo(parent, x, y, size)
     local texture = parent:CreateTexture(nil, "ARTWORK")
-    texture:SetTexture(LOGO)
+    texture:SetTexture(MEDIA .. "Logo.tga")
     texture:SetPoint("TOPLEFT", x, -y)
     texture:SetSize(size, size)
     return texture

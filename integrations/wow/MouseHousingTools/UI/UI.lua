@@ -5,7 +5,7 @@ local Theme = MHT.Theme
 local Colors = Theme.Colors
 
 function UI.Surface(parent, width, height, skin)
-    local frame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    local frame = CreateFrame("Frame", nil, parent)
     frame:SetSize(width, height)
     Theme.Skin(frame, skin or "panel")
     return frame
@@ -59,10 +59,12 @@ function UI.Bar(parent, width, color)
     local texture = bar:CreateTexture(nil, "BACKGROUND")
     texture:SetAllPoints(bar)
     Theme.Unsnapped(texture)
-    texture:SetColorTexture(unpack(color))
+    Theme.Bar(texture, width)
+    texture:SetVertexColor(unpack(color))
     function bar:SetFraction(portion)
         self.fraction = math.max(0, math.min(1, portion))
         self:SetWidth(math.max(0.01, width * self.fraction))
+        Theme.CropBar(texture, width, self.fraction)
         self:SetShown(self.fraction > 0)
     end
     bar:SetFraction(1)
@@ -97,7 +99,7 @@ end
 
 function UI.Button(parent, text, x, y, width, onClick, style, height)
     height = height or 28
-    local button = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    local button = CreateFrame("Button", nil, parent)
     button:SetPoint("TOPLEFT", x, -y)
     button:SetSize(width, height)
     local label = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -144,10 +146,7 @@ function UI.ResetButton(parent, x, y, onClick)
 end
 
 function UI.CloseButton(parent, x, y, size, onClick)
-    local button = CreateFrame("Button", nil, parent, "UIPanelCloseButton")
-    button:SetPoint("TOPLEFT", x - 2, -y + 2)
-    button:SetSize(size + 4, size + 4)
-    button:SetScript("OnClick", onClick)
+    local button = UI.IconButton(parent, "close", x, y, size, math.min(10, size * 0.4), onClick)
     UI.Tooltip(button, "Close")
     return button
 end
@@ -243,7 +242,7 @@ function UI.Range(parent, text, x, y, width, minimum, maximum, step, value, onCh
     slider:SetMinMaxValues(minimum, maximum)
     slider:SetValueStep(step)
     slider:SetObeyStepOnDrag(true)
-    slider:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
+    slider:SetThumbTexture(Theme.THUMB)
     local thumb = slider:GetThumbTexture()
     thumb:SetSize(16, 16)
     Theme.Unsnapped(thumb)
@@ -302,7 +301,7 @@ function UI.Scrollbar(scroll, body)
     bar:SetOrientation("VERTICAL")
     bar:SetValueStep(1)
     bar:SetObeyStepOnDrag(false)
-    bar:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
+    bar:SetThumbTexture(Theme.THUMB)
     local thumb = bar:GetThumbTexture()
     thumb:SetAlpha(0)
     local rail = UI.Surface(bar, 8, bar:GetHeight(), "scrollRail")
@@ -406,9 +405,13 @@ function UI.Dropdown(parent, x, y, width, choices, value, onSelect)
 end
 
 function UI.Check(parent, label, x, y, checked, onChange)
-    local button = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+    local button = CreateFrame("CheckButton", nil, parent)
     button:SetPoint("TOPLEFT", x, -y)
     button:SetSize(24, 24)
+    local box = UI.Surface(button, 18, 18, "check")
+    box:SetPoint("CENTER", 0, 0)
+    box:SetFrameLevel(math.max(0, button:GetFrameLevel() - 1))
+    local mark = Theme.Icon(button, "check", 14)
     local text = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     Theme.Font(text, "label")
     text:SetTextColor(unpack(Colors.text))
@@ -424,11 +427,21 @@ function UI.Check(parent, label, x, y, checked, onChange)
     local parentWidth = (parent:GetWidth() or 0) - x - 31
     if parentWidth > 0 then button:SetLabelWidth(parentWidth) end
     local function paint()
-        text:SetTextColor(unpack(button:IsEnabled() and Colors.text or Colors.muted))
+        local enabled, checked = button:IsEnabled(), button:GetChecked()
+        text:SetTextColor(unpack(enabled and Colors.text or Colors.muted))
+        box:SetAlpha(enabled and 1 or 0.45)
+        Theme.Skin(box, (checked or button.hovered and enabled) and "inputFocus" or "check")
+        mark:SetShown(checked)
+        mark:SetVertexColor(unpack(enabled and Colors.gold or Colors.muted))
     end
+    -- The addon draws its own checkmark, so it must also update when code checks the box.
+    local setChecked = button.SetChecked
+    function button:SetChecked(value) setChecked(self, value); paint() end
     button:SetScript("OnEnable", paint)
     button:SetScript("OnDisable", paint)
-    button:SetScript("OnClick", function() onChange(button:GetChecked()) end)
+    button:SetScript("OnEnter", function() button.hovered = true; paint() end)
+    button:SetScript("OnLeave", function() button.hovered = false; paint() end)
+    button:SetScript("OnClick", function() paint(); onChange(button:GetChecked()) end)
     button:SetChecked(checked)
     return button
 end
