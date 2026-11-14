@@ -1,0 +1,483 @@
+local _, MHT = ...
+local Placement = {}
+Placement.__index = Placement
+MHT.Placement = Placement
+
+-- Cooldown starts after the game confirms placement.
+local BATCH_COPY_DELAY = 0.2
+local THROTTLED_COPY_DELAY = 1
+local MAX_COPY_RETRIES = 3
+
+local function resultName(result)
+    for name, value in pairs(Enum.HousingResult or {}) do
+        if value == result then return name end
+    end
+    return "Unknown housing error"
+end
+
+Placement.DEFAULT_WORKFLOW = "batch"
+
+local shapeJob = { movingLabel = " selected copy..." }
+
+function shapeJob.Reject(placement, selected)
+    local guid = selected.decorGUID
+    if guid == placement.source.decorGUID then return "That is the source. Click a copy instead." end
+    if selected.decorID and selected.decorID ~= placement.source.decorID then
+        return "That is a different decor item. Click a copy."
+    end
+    if placement.finished[guid] then return "That copy is finished. Click another copy." end
+    if placement.workflow == "repeat" and placement.createdGUID and guid ~= placement.createdGUID then
+        return "Click the copy just created for this target."
+    end
+end
+
+function shapeJob.Move(placement, target, guid, done, onPhase)
+    local item = MHT.ItemProfiles.Calibration(placement.source.decorID, placement.measurements)
+    placement.motion:MoveTo(target, item, placement.profile, guid, done, onPhase)
+end
+
+function shapeJob.Done(placement)
+    return "Done. All " .. placement.completed .. " copies were moved and rotated; source item kept."
+end
+
+function Placement.New(api, notify, measurements)
+    return setmetatable({
+        api = api,
+        motion = MHT.Motion.New(api),
+        measurements = measurements,
+        notify = notify,
+        state = "idle",
+        completed = 0,
+    }, Placement)
+end
+
+function Placement:Busy()
+    return self.state ~= "idle"
+end
+
+function Placement:SetState(state, message)
+    self.state = state
+    self.age = 0
+    if message then
+        self.notify(message, self.completed, self.plan and #self.plan.items or 0)
+    end
+end
+
+function Placement:Start(plan, profile, workflow)
+    if self:Busy() then return end
+    if not self.api:Available() then
+        return nil, "Placement needs Retail housing catalog variants (12.0.5+)."
+    end
+    if not self.api:Active() then
+        return nil, "Open the housing editor first."
+    end
+    if self.api:IsSelected() then
+        return nil, "Finish editing the selected item first."
+    end
+    if not MHT.Plan.SingleItem(plan) then
+        return nil, "This plan uses more than one item; building supports one item for now."
+    end
+
+    workflow = workflow or Placement.DEFAULT_WORKFLOW
+    if workflow ~= "repeat" and workflow ~= "batch" then
+        return nil, "Unknown placement workflow."
+    end
+
+    self.plan = plan
+    self.profile = profile
+    self.workflow = workflow
+    self.job = shapeJob
+
+    self.copiesCreated = 0
+    self.copyDelay, self.copyRetries, self.retryDelay = BATCH_COPY_DELAY, 0, nil
+
+    self.completed = 0
+
+    self.source = nil
+    self.cursor = nil
+    self.hoverGUID = nil
+    self.hoverX = nil
+    self.hoverY = nil
+    self.still = 0
+
+    self.activeGUID = nil
+    self.activeIndex = nil
+    self.createdGUID = nil
+    self.finished = {}
+    self.lastRejectedGUID = nil
+
+    self.saved = self.api:SaveSettings()
+
+    self:SetState(
+        "arming",
+        workflow == "batch"
+            and "Hover over the source and keep the mouse still. All copies will be created first."
+            or "Hover over the source and keep the mouse still. Each copy will be placed, then moved."
+    )
+    return true
+end
+
+function Placement:StartSelecting(plan, profile, job, message)
+    if self:Busy() then return end
+    self.plan, self.profile, self.job, self.workflow = plan, profile, job, nil
+    self.completed = 0
+    self.finished = {}
+    self.saved, self.source, self.cursor = nil, nil, nil
+    self.activeGUID, self.activeIndex = nil, nil
+    self.lastRejectedGUID = nil
+    self:SetState("select", message)
+    return true
+end
+
+function Placement:Abort(message)
+    if not self:Busy() then
+        if message then
+            self.notify(message, self.completed, self.plan and #self.plan.items or 0)
+        end
+        return
+    end
+
+    self.motion:Stop()
+
+    local selected = self.api:Available() and self.api:Selected()
+    local ownEditing = false
+
+    if (self.state == "copy" or self.state == "placing" or self.state == "throttled") and self.api:Available()
+        and self.api:Mode() == Enum.HouseEditorMode.BasicDecor
+        and self.api:HasPendingCopy() then
+        ownEditing = true
+    end
+
+    if self.activeGUID and selected and selected.decorGUID == self.activeGUID then
+        ownEditing = true
+    end
+
+    self.state = "idle"
+
+    if ownEditing then
+        pcall(self.api.Cancel, self.api)
+    end
+
+    pcall(self.api.RestoreSettings, self.api, self.saved)
+
+    self.saved = nil
+    self.cursor = nil
+    self.activeGUID = nil
+    self.activeIndex = nil
+    self.createdGUID = nil
+
+    self:SetState("idle", message or "Aborted. Finished items remain placed.")
+end
+
+function Placement:CursorStill()
+    if not self.cursor then return true end
+
+    local x, y = GetCursorPosition()
+    if math.abs(x - self.cursor.x) + math.abs(y - self.cursor.y) > 8 then
+        self:Abort("Mouse moved while copies were being created. Placement stopped.")
+        return false
+    end
+
+    return true
+end
+
+function Placement:BeginCopy()
+    local copyIndex = self.copiesCreated + 1
+
+    self:SetState(
+        "copy",
+        string.format("Creating copy %d / %d. Keep the mouse still...", copyIndex, #self.plan.items)
+    )
+    self.createdGUID = nil
+
+    -- Keep using the captured source when copies overlap it.
+    self.api:BeginCopy(self.source, #self.plan.items - self.copiesCreated)
+end
+
+function Placement:BeginBasic()
+    self:SetState("basic", "Preparing copies. Keep the mouse still...")
+    self.api:Switch("BasicDecor")
+end
+
+function Placement:ReturnToSource()
+    self.cursor = nil
+    self.hoverGUID, self.hoverX, self.hoverY, self.still = nil, nil, nil, 0
+    self:SetState("returnsource", "Returning to Basic mode. Hover over the original source for the next copy.")
+    self.api:Switch("BasicDecor")
+end
+
+function Placement:BeginSelectionPhase()
+    self.cursor = nil
+    self.hoverGUID = nil
+    self.lastRejectedGUID = nil
+
+    self:SetState(
+        "expert",
+        self.workflow == "batch" and string.format(
+            "%d copies created. Switching to Advanced mode; click the stacked copies one at a time.",
+            self.copiesCreated
+        ) or "Copy placed. Switching to Advanced mode; click the new copy to move it."
+    )
+    self.api:Switch("ExpertDecor")
+end
+
+function Placement:HandleSelectedCopy(selected)
+    local guid = selected.decorGUID
+    if not guid then return end
+
+    local reason = self.job.Reject(self, selected)
+    if reason then
+        if self.lastRejectedGUID ~= guid then
+            self.lastRejectedGUID = guid
+            self.notify(reason, self.completed, #self.plan.items)
+        end
+        return
+    end
+
+    self.lastRejectedGUID = nil
+    self.activeGUID = guid
+
+    self.activeIndex = self.completed + 1
+    local target = self.plan.items[self.activeIndex]
+
+    self:SetState(
+        "moving",
+        string.format(
+            "Moving selected copy to target %d / %d...",
+            self.activeIndex,
+            #self.plan.items
+        )
+    )
+
+    local function done()
+        self:SetState("committing", "Saving the selected copy...")
+        self.api:Commit()
+    end
+    local function onPhase(label)
+        self:SetState("moving", label .. self.job.movingLabel .. (target.label and (" " .. target.label) or ""))
+    end
+    self.job.Move(self, target, guid, done, onPhase)
+end
+
+function Placement:Update(elapsed)
+    if not self:Busy() then return end
+
+    if not self.api:Active() then
+        self:Abort("Housing editor closed; placement stopped.")
+        return
+    end
+
+    self.age = self.age + elapsed
+
+    if self.state == "arming" or self.state == "source" then
+        local hovered = self.api:Hovered()
+        local x, y = GetCursorPosition()
+
+        if not hovered or not hovered.decorGUID
+            or (self.state == "source" and hovered.decorGUID ~= self.source.decorGUID) then
+            self.hoverGUID = nil
+            self.still = 0
+            return
+        end
+
+        if self.hoverGUID ~= hovered.decorGUID
+            or not self.hoverX
+            or math.abs(x - self.hoverX) + math.abs(y - self.hoverY) > 2 then
+            self.hoverGUID = hovered.decorGUID
+            self.hoverX = x
+            self.hoverY = y
+            self.still = 0
+        end
+
+        self.still = self.still + elapsed
+        if self.still < 1.2 then return end
+
+        if self.state == "arming" then
+            if self.plan.fit then
+                -- Fitted plans are rebuilt for the real item's size.
+                local dimensions, reason = MHT.ItemProfiles.Dimensions(hovered.decorID, self.measurements)
+                if not dimensions then self:Abort(reason); return end
+                local plan
+                plan, reason = self.plan.fit(dimensions)
+                if not plan then self:Abort(reason); return end
+                self.plan = plan
+            end
+            local stock, reason = self.api:CheckStock(hovered, #self.plan.items)
+            if not stock then self:Abort(reason); return end
+            self.source = hovered
+            self.notify(string.format("%s: %d matching copies; %d needed.",
+                stock.name, stock.count, #self.plan.items), 0, #self.plan.items)
+            self.api:UsePlacementSettings()
+        end
+        self.cursor = { x = x, y = y }
+        self:BeginBasic()
+        return
+    end
+
+    if self.cursor and not self:CursorStill() then return end
+
+    if self.state == "basic" then
+        if self.api:Mode() == Enum.HouseEditorMode.BasicDecor then
+            self:BeginCopy()
+        end
+
+    elseif self.state == "returnsource" then
+        if self.api:Mode() == Enum.HouseEditorMode.BasicDecor then
+            self:SetState("source", "Hover over the original source and hold still for the next copy.")
+        end
+
+    elseif self.state == "nextcopy" then
+        if self.age >= self.copyDelay
+            and self.api:Mode() == Enum.HouseEditorMode.BasicDecor
+            and not self.api:HasPendingCopy() then
+            self:BeginCopy()
+        end
+
+    elseif self.state == "throttled" then
+        if self.api:Mode() ~= Enum.HouseEditorMode.BasicDecor then
+            self:Abort("Editor mode changed while waiting to retry the copy.")
+        elseif self.age >= self.retryDelay then
+            if self.api:HasPendingCopy() then
+                local pending = self.api:PendingInfo()
+                if pending and (not pending.decorID or pending.decorID == self.source.decorID) then
+                    self:SetState("placing", "Retrying the pending copy after WoW's request limit...")
+                    self.api:PlaceCopy()
+                else
+                    self:Abort("The pending item changed while waiting to retry the copy.")
+                end
+            else
+                self:BeginCopy()
+            end
+        end
+
+    elseif self.state == "copy" then
+        if self.api:HasPendingCopy() then
+            local pending = self.api:PendingInfo()
+
+            if pending and (not pending.decorID or pending.decorID == self.source.decorID) then
+                self:SetState("placing", "Placing a copy at the start point...")
+                self.api:PlaceCopy()
+            end
+        end
+
+    elseif self.state == "expert" then
+        if self.api:Mode() == Enum.HouseEditorMode.ExpertDecor then
+            self:SetState(
+                "select",
+                self.workflow == "batch"
+                    and "Mouse movement is allowed now. Click one stacked copy; after it moves, click the next."
+                    or "Click the new copy to move it. Then hover over the original source to repeat."
+            )
+        end
+
+    elseif self.state == "select" then
+        if self.api:Mode() ~= Enum.HouseEditorMode.ExpertDecor then
+            self:Abort("Editor mode changed; placement stopped.")
+            return
+        end
+
+        local selected = self.api:Selected()
+        if selected then
+            self:HandleSelectedCopy(selected)
+        end
+
+    elseif self.state == "moving" then
+        if self.api:Mode() ~= Enum.HouseEditorMode.ExpertDecor then
+            self:Abort("Editor mode changed; placement stopped.")
+            return
+        end
+
+        self.motion:Update(elapsed)
+    end
+
+    if self.state ~= "select" and self.state ~= "source" and self.state ~= "moving" and self.age > 10 then
+        self:Abort("The game did not confirm the last action. Placement stopped.")
+    end
+end
+
+function Placement:OnEvent(event, ...)
+    if not self:Busy() then return end
+
+    if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_LEAVING_WORLD" then
+        self:Abort("Placement interrupted.")
+        return
+    end
+
+    if event == "HOUSE_EDITOR_MODE_CHANGE_FAILURE" or event == "HOUSING_DECOR_PLACE_FAILURE" then
+        local result = ...
+        local name = resultName(result)
+        local limited = name == "TooManyRequests"
+        if event == "HOUSING_DECOR_PLACE_FAILURE" and limited then
+            if self.state == "throttled" then return end
+            if self.state == "copy" or self.state == "placing" then
+                self.copyRetries = self.copyRetries + 1
+                if self.copyRetries <= MAX_COPY_RETRIES then
+                    self.copyDelay, self.retryDelay = THROTTLED_COPY_DELAY, 2 ^ self.copyRetries
+                    self:SetState("throttled", string.format(
+                        "WoW's housing request limit reached. Waiting %d seconds before retrying copy %d / %d. Keep the mouse still.",
+                        self.retryDelay, self.copiesCreated + 1, #self.plan.items))
+                    return
+                end
+            end
+        end
+        local action = event == "HOUSE_EDITOR_MODE_CHANGE_FAILURE" and "changing housing mode"
+            or self.state == "committing" and "saving the moved item" or "placing a copy"
+        self:Abort(limited and ("WoW is limiting housing requests. Wait a few seconds before trying again. ("
+            .. name .. ", " .. tostring(result) .. ")")
+            or ("WoW rejected " .. action .. ": " .. name .. " (" .. tostring(result) .. ")."))
+        return
+    end
+
+    if event ~= "HOUSING_DECOR_PLACE_SUCCESS" then return end
+
+    local guid, _, isNew, isPreview = ...
+    if isPreview then return end
+
+    if (self.state == "placing" or self.state == "throttled") and isNew then
+        self.copiesCreated = self.copiesCreated + 1
+        self.copyRetries, self.retryDelay = 0, nil
+        self.createdGUID = guid
+
+        if self.workflow == "repeat" then
+            self:BeginSelectionPhase()
+        elseif self.copiesCreated < #self.plan.items then
+            self:SetState(
+                "nextcopy",
+                string.format(
+                    "Created copy %d / %d. Waiting %.2fs before the next copy...",
+                    self.copiesCreated,
+                    #self.plan.items,
+                    self.copyDelay
+                )
+            )
+        else
+            self:BeginSelectionPhase()
+        end
+        return
+    end
+
+    if self.state == "committing" and not isNew then
+        if guid and guid ~= self.activeGUID then return end
+        local committedGUID = self.activeGUID
+
+        self.finished[committedGUID] = true
+        self.completed = self.completed + 1
+        self.activeGUID = nil
+        self.activeIndex = nil
+
+        if self.completed == #self.plan.items then
+            self:Abort(self.job.Done(self))
+        elseif self.workflow == "repeat" then
+            self:ReturnToSource()
+        else
+            self:SetState(
+                "select",
+                string.format(
+                    "%d / %d finished. Click another stacked copy.",
+                    self.completed,
+                    #self.plan.items
+                )
+            )
+        end
+    end
+end

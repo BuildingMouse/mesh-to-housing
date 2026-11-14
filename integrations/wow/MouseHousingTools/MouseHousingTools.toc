@@ -1,0 +1,43 @@
+## Interface: 120100, 120007, 120005
+## Title: MouseHousingTools
+## Notes: Shape previews and click-assisted housing placement.
+## Version: 0.1.1
+## SavedVariables: MouseHousingToolsDB
+
+Util.lua
+Geometry\Rotation.lua
+Geometry\Plan.lua
+Shapes\Stairs.lua
+Shapes\Circle.lua
+Shapes\Layout.lua
+Items\ItemProfiles.lua
+Items\RotationAxes.lua
+Items\ItemCatalog.lua
+Placement\Housing.lua
+Placement\NativeEdit.lua
+Placement\Motion.lua
+Placement\Placement.lua
+Dev\Figures\Cube.lua
+Dev\Figures\Rhombicosidodecahedron.lua
+Dev\Figures\TiltedCircle.lua
+Dev\Housing.lua
+Dev\Placement.lua
+Dev\RotationAxes.lua
+Dev\RotationCalibration.lua
+Dev\CornerTest.lua
+Dev\MovementCapture.lua
+Dev\Calibration.lua
+Dev\ResizeCalibration.lua
+UI\UI.lua
+UI\Preview.lua
+UI\Dev\CapturePanel.lua
+UI\Dev\RotationCalibrationPanel.lua
+UI\Dev\ResizeCalibrationPanel.lua
+UI\Dev\CalibrationPanel.lua
+UI\Dev\CornerTestPanel.lua
+UI\Dev\TestFiguresPanel.lua
+UI\Dev\ResizeTestPanel.lua
+UI\Window.lua
+UI\EditorControls.lua
+UI\HousingTooltips.lua
+Init.lua
