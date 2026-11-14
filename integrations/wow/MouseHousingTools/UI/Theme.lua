@@ -86,15 +86,36 @@ function Theme.Skin(frame, name)
     layout(frame, skin)
 end
 
--- Bars are drawn white at twice their width and 12 pixels tall, so cropping never stretches the rounded end.
-local BAR_TEXTURE_WIDTHS = { [106] = 256, [560] = 2048 }
+local BAR_LENGTH, BAR_TEXTURE, BAR_END = 32, 64, 3
 
-function Theme.Bar(texture, width)
-    texture:SetTexture(MEDIA .. "Bars\\" .. width .. ".tga")
+function Theme.BarPieces(bar)
+    local pieces = {}
+    for i = 1, 3 do
+        pieces[i] = bar:CreateTexture(nil, "BACKGROUND")
+        Theme.Unsnapped(pieces[i])
+        pieces[i]:SetTexture(MEDIA .. "Bar.tga")
+    end
+    return pieces
 end
 
-function Theme.CropBar(texture, width, fraction)
-    texture:SetTexCoord(0, fraction * width * 2 / BAR_TEXTURE_WIDTHS[width], 0, 12 / 16)
+function Theme.LayoutBar(pieces, width, shown)
+    local spans = { math.min(shown, BAR_END), math.max(0, math.min(shown, width - BAR_END) - BAR_END),
+        math.max(0, shown - (width - BAR_END)) }
+    local starts = { 0, BAR_END, BAR_LENGTH - BAR_END }
+    local x = 0
+    for i, piece in ipairs(pieces) do
+        local span = spans[i]
+        piece:SetShown(span > 0)
+        if span > 0 then
+            local u = starts[i] * 2 / BAR_TEXTURE
+            local length = i == 2 and BAR_LENGTH - 2 * BAR_END or span
+            piece:ClearAllPoints()
+            piece:SetPoint("TOPLEFT", x, 0)
+            piece:SetSize(span, 6)
+            piece:SetTexCoord(u, u + length * 2 / BAR_TEXTURE, 0, 12 / 16)
+        end
+        x = x + span
+    end
 end
 
 Theme.THUMB = MEDIA .. "Thumb.tga"

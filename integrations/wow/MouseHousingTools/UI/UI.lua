@@ -58,19 +58,72 @@ end
 function UI.Bar(parent, width, color)
     local bar = CreateFrame("Frame", nil, parent)
     bar:SetSize(width, 6)
-    local texture = bar:CreateTexture(nil, "BACKGROUND")
-    texture:SetAllPoints(bar)
-    Theme.Unsnapped(texture)
-    Theme.Bar(texture, width)
-    texture:SetVertexColor(unpack(color))
+    local pieces = Theme.BarPieces(bar)
+    for _, piece in ipairs(pieces) do piece:SetVertexColor(unpack(color)) end
+    local function draw()
+        local shown = width * bar.fraction
+        bar:SetWidth(math.max(0.01, shown))
+        Theme.LayoutBar(pieces, width, shown)
+    end
     function bar:SetFraction(portion)
         self.fraction = math.max(0, math.min(1, portion))
-        self:SetWidth(math.max(0.01, width * self.fraction))
-        Theme.CropBar(texture, width, self.fraction)
+        draw()
         self:SetShown(self.fraction > 0)
+    end
+    function bar:SetLength(value)
+        width = value
+        draw()
     end
     bar:SetFraction(1)
     return bar
+end
+
+function UI.ResizeGrip(frame, onResized)
+    local grip = CreateFrame("Button", nil, frame)
+    grip:SetSize(12, 12)
+    grip:SetPoint("BOTTOMRIGHT", 0, 0)
+    local lines = {}
+    for i = 1, 3 do
+        local line = grip:CreateLine(nil, "OVERLAY")
+        line:SetStartPoint("BOTTOMRIGHT", grip, -2 - i * 3, 2)
+        line:SetEndPoint("BOTTOMRIGHT", grip, -2, 2 + i * 3)
+        line:SetThickness(1.5)
+        lines[i] = line
+    end
+    local function paint(color)
+        for _, line in ipairs(lines) do line:SetColorTexture(unpack(color)) end
+    end
+    grip:SetScript("OnEnter", function() paint(Colors.gold) end)
+    grip:SetScript("OnLeave", function() paint(Colors.muted) end)
+    local start
+    local function stop()
+        if not start then return end
+        start = nil
+        grip:SetScript("OnUpdate", nil)
+        onResized()
+    end
+    grip:SetScript("OnMouseDown", function(_, button)
+        if button ~= "LeftButton" then return end
+        local x, y = GetCursorPosition()
+        start = { x = x, y = y, left = frame:GetLeft(), top = frame:GetTop(),
+            width = frame:GetWidth(), height = frame:GetHeight(), scale = frame:GetEffectiveScale() }
+        frame:ClearAllPoints()
+        frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", start.left, start.top)
+        grip:SetScript("OnUpdate", function()
+            if not IsMouseButtonDown("LeftButton") then stop(); return end
+            local cursorX, cursorY = GetCursorPosition()
+            local minWidth, minHeight = frame:GetResizeBounds()
+            local screenWidth = UIParent:GetWidth() * UIParent:GetEffectiveScale() / start.scale
+            local width = start.width + (cursorX - start.x) / start.scale
+            local height = start.height - (cursorY - start.y) / start.scale
+            frame:SetSize(math.max(minWidth, math.min(width, screenWidth - start.left)),
+                math.max(minHeight, math.min(height, start.top)))
+        end)
+    end)
+    grip:SetScript("OnMouseUp", stop)
+    grip:SetScript("OnHide", stop)
+    paint(Colors.muted)
+    return grip
 end
 
 -- Buttons

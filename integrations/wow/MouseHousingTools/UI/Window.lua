@@ -6,6 +6,11 @@ MHT.Window = Window
 -- The main window.
 
 local MODES = { { "shapes", "Shapes" }, { "sketch", "3D Sketch" }, { "sculpt", "3D Sculpt" } }
+-- Default and smallest sizes. The full and the small window keep their saved state under these prefixes.
+local SIZES = {
+    window = { width = 1000, height = 724, minWidth = 820, minHeight = 560 },
+    compact = { width = 640, height = 500, minWidth = 430, minHeight = 400 },
+}
 
 local function centerOffset(frame)
     local x, y = frame:GetCenter()
@@ -26,22 +31,25 @@ function Window.New(settings, uiState)
         self:OnPlacementMessage(message, completed, total)
     end)
     self:CreateFrame()
+    self.developer = MHT.DeveloperWindow.New(self)
     self.settingsPanel = MHT.SettingsPanel.New(self, self.frame)
     self:CreatePreview()
     self.footer = MHT.Footer.New(self, self.frame)
-    self.developer = MHT.DeveloperWindow.New(self)
+    self.compact = self.uiState.compact == true
+    self:Layout()
+    self:ApplySavedPosition(UIParent)
     self.chrome = MHT.EditorChrome.New()
     self:SelectMode("shapes")
     self:RestoreBuild()
+    self:FitToBuild()
     self.frame:Hide()
     return self
 end
 
 function Window:CreateFrame()
     local UI = MHT.UI
-    local frame = UI.Surface(UIParent, 1000, 724, "window")
+    local frame = UI.Surface(UIParent, SIZES.window.width, SIZES.window.height, "window")
     self.frame = frame
-    frame:SetPoint("CENTER", UIParent, "CENTER", self.uiState.windowX or 0, self.uiState.windowY or 0)
     frame:SetFrameStrata("FULLSCREEN_DIALOG")
     frame:SetFrameLevel(100)
     frame:SetClampedToScreen(true)
@@ -59,33 +67,111 @@ function Window:CreateFrame()
     _G.MouseHousingToolsWindow = frame
     table.insert(UISpecialFrames, "MouseHousingToolsWindow")
 
-    MHT.Theme.Logo(frame, 18, 4, 54)
-    local title = UI.Text(frame, "Mouse Housing Tools", 84, 20, 540, "GameFontNormalLarge")
-    title:SetTextColor(unpack(MHT.Theme.Colors.gold))
+    self.logo = MHT.Theme.Logo(frame, 18, 4, 54)
+    self.title = UI.Text(frame, "Mouse Housing Tools", 84, 20, 540, "GameFontNormalLarge")
+    self.title:SetTextColor(unpack(MHT.Theme.Colors.gold))
     local tabs = CreateFrame("Frame", nil, frame)
     tabs:SetPoint("TOPLEFT", 18, -60)
-    tabs:SetSize(964, 38)
+    tabs:SetPoint("TOPRIGHT", -18, -60)
+    tabs:SetHeight(38)
     self.tabs = {}
     for i, tab in ipairs(MODES) do
         local mode = tab[1]
         self.tabs[mode] = UI.Button(tabs, tab[2], (i - 1) * 138, 0, 132, function() self:SelectMode(mode) end, "tab", 34)
     end
-    UI.Rule(tabs, 38, 964)
-    self.close = UI.CloseButton(frame, 954, 17, 28, function() frame:Hide() end)
+    UI.Rule(tabs, 38, 964):SetPoint("TOPRIGHT", 0, -38)
+    self.tabFrame = tabs
+    self.close = UI.CloseButton(frame, 0, 0, 28, function() frame:Hide() end)
+    self.close:ClearAllPoints()
+    self.sizeButton = UI.IconButton(frame, "shrink", 0, 0, 28, 14, function() self:ToggleCompact() end)
+    self.sizeButton:ClearAllPoints()
+    self.sizeButton:SetPoint("TOPRIGHT", self.close, "TOPLEFT", -6, 0)
+    UI.Tooltip(self.sizeButton, "Window size", "Switch between the full window and a small preview. Drag the bottom-right corner to resize either one.")
     if MHT.DEV_MODE then
-        self.developerButton = UI.Button(frame, "Developer tools", 800, 16, 132,
+        self.developerButton = UI.Button(frame, "Developer tools", 0, 0, 132,
             function() self.developer:Open("test") end, nil, 30)
+        self.developerButton:ClearAllPoints()
+        self.developerButton:SetPoint("TOPRIGHT", self.sizeButton, "TOPLEFT", -8, 1)
+    end
+    self.grip = UI.ResizeGrip(frame, function() self:SaveSize() end)
+end
+
+-- The small window keeps only the preview and the footer.
+function Window:Layout()
+    local compact, frame, state, footer = self.compact, self.frame, self.uiState, self.footer
+    local prefix = self:StatePrefix()
+    local size = SIZES[prefix]
+    frame:SetResizeBounds(size.minWidth, size.minHeight)
+    frame:SetSize(math.max(size.minWidth, state[prefix .. "Width"] or size.width),
+        math.max(size.minHeight, state[prefix .. "Height"] or size.height))
+    local logo = compact and 28 or 54
+    self.logo:SetSize(logo, logo)
+    self.logo:SetPoint("TOPLEFT", compact and 12 or 18, compact and -8 or -4)
+    MHT.Theme.Font(self.title, compact and "heading" or "title")
+    self.title:SetPoint("TOPLEFT", compact and 48 or 84, compact and -14 or -20)
+    self.close:SetPoint("TOPRIGHT", compact and -10 or -18, compact and -8 or -17)
+    self.sizeButton.icon:SetShape(compact and "expand" or "shrink")
+    self.tabFrame:SetShown(not compact)
+    self.settingsPanel.frame:SetShown(not compact)
+    if self.developerButton then self.developerButton:SetShown(not compact) end
+
+    -- The settings column keeps its width, and the preview and the footer take the rest.
+    local margin, gap = compact and 12 or 18, compact and 8 or 12
+    local panel = self.previewPanel
+    panel:ClearAllPoints()
+    footer.frame:ClearAllPoints()
+    footer:SetCompact(compact)
+    footer.frame:SetPoint("BOTTOMLEFT", margin, margin)
+    footer.frame:SetPoint("BOTTOMRIGHT", -margin, margin)
+    panel:SetPoint("TOPLEFT", compact and 12 or 394, compact and -44 or -104)
+    panel:SetPoint("BOTTOMRIGHT", footer.frame, "TOPRIGHT", 0, gap)
+    self.settingsPanel.frame:SetPoint("BOTTOMLEFT", footer.frame, "TOPLEFT", 0, gap)
+    self.previewHeading:SetShown(not compact)
+    self.roomPicker:SetShown(not compact)
+    self.preview:SetRoom(compact and "none" or self.uiState.previewRoom)
+    self.preview.frame:SetPoint("TOPLEFT", 14, compact and -14 or -44)
+    self.preview.frame:SetPoint("BOTTOMRIGHT", -14, compact and 14 or 58)
+    self.resetView:ClearAllPoints()
+    if compact then
+        self.resetView:SetPoint("TOPRIGHT", -20, -20)
+    else
+        self.resetView:SetPoint("BOTTOMRIGHT", -14, 16)
+    end
+end
+
+function Window:SetCompact(compact)
+    if self.compact == compact then return end
+    self:SavePosition()
+    self.compact = compact
+    self.uiState.compact = compact or nil
+    self:Layout()
+    self:ApplySavedPosition(self.frame:GetParent())
+end
+
+function Window:ToggleCompact()
+    self:SetCompact(not self.compact)
+end
+
+-- A build only needs the preview, so the window shrinks once when a build starts.
+-- When the build ends, finished or ended by the player, the full window comes back.
+function Window:FitToBuild()
+    local state = self.uiState
+    local running = self.placement:Busy() or self.placement:HasSession()
+    if running and not state.sizedForBuild then
+        state.sizedForBuild = true
+        self:SetCompact(true)
+    elseif not running and state.sizedForBuild then
+        state.sizedForBuild = nil
+        self:SetCompact(false)
     end
 end
 
 function Window:CreatePreview()
     local UI = MHT.UI
     local panel = UI.Surface(self.frame, 588, 512, "deep")
-    panel:SetPoint("TOPLEFT", 394, -104)
-    UI.Heading(panel, "Preview", 14, 14, 270)
+    self.previewPanel = panel
+    self.previewHeading = UI.Heading(panel, "Preview", 14, 14, 270)
     self.preview = MHT.Preview.New(panel)
-    self.preview.frame:SetPoint("TOPLEFT", 14, -44)
-    self.preview.frame:SetSize(560, 410)
     MHT.Theme.Skin(self.preview.frame, nil)
 
     local rooms = {}
@@ -98,12 +184,18 @@ function Window:CreatePreview()
         self.uiState.previewRoom = id
         self.preview:SetRoom(id)
     end)
+    self.roomPicker = picker
+    picker:ClearAllPoints()
+    picker:SetPoint("BOTTOMLEFT", 14, 12)
     picker.menu:ClearAllPoints()
     picker.menu:SetPoint("BOTTOMLEFT", picker, "TOPLEFT", 0, 2)
     UI.Tooltip(picker, "Preview room",
         "Small is twice as wide as Tiny, Medium three times and Large four times. All rooms are as high as Tiny.")
     self.preview:SetRoom(roomID)
-    local reset = UI.ResetButton(panel, 550, 472, function() self.preview:ResetView() end)
+    local reset = UI.ResetButton(panel, 0, 0, function() self.preview:ResetView() end)
+    -- The small window puts the button over the preview's corner.
+    reset:SetFrameLevel(self.preview.frame:GetFrameLevel() + 2)
+    self.resetView = reset
     UI.Tooltip(reset, "Reset view", "Drag to turn the preview, right-drag to move it, and scroll to zoom.")
 end
 
@@ -215,6 +307,7 @@ end
 
 function Window:OnPlacementMessage(message, completed, total)
     self:SaveBuildProgress()
+    self:FitToBuild()
     self:SetStatus(message)
     self.developer:OnPlacementMessage(message, completed, total)
     self:UpdateProgress()
@@ -295,14 +388,28 @@ function Window:Toggle()
     end
 end
 
+function Window:StatePrefix()
+    return self.compact and "compact" or "window"
+end
+
 function Window:SavePosition()
     local x, y = centerOffset(self.frame)
-    if x then self.uiState.windowX, self.uiState.windowY = x, y end
+    local prefix = self:StatePrefix()
+    if x then self.uiState[prefix .. "X"], self.uiState[prefix .. "Y"] = x, y end
 end
 
 function Window:ApplySavedPosition(parent)
+    local state, prefix = self.uiState, self:StatePrefix()
     self.frame:ClearAllPoints()
-    self.frame:SetPoint("CENTER", parent or UIParent, "CENTER", self.uiState.windowX or 0, self.uiState.windowY or 0)
+    self.frame:SetPoint("CENTER", parent or UIParent, "CENTER",
+        state[prefix .. "X"] or state.windowX or 0, state[prefix .. "Y"] or state.windowY or 0)
+end
+
+function Window:SaveSize()
+    local prefix = self:StatePrefix()
+    self.uiState[prefix .. "Width"], self.uiState[prefix .. "Height"] = self.frame:GetSize()
+    self:SavePosition()
+    self:ApplySavedPosition(self.frame:GetParent())
 end
 
 -- In the housing editor, only its child frames stay visible.

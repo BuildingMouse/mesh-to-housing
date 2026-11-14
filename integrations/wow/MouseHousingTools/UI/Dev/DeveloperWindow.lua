@@ -5,6 +5,8 @@ MHT.DeveloperWindow = DeveloperWindow
 
 -- Calibration and test tools, shown with MHT.DEV_MODE.
 
+local LAYOUT_KEYS = { "windowX", "windowY", "windowWidth", "windowHeight", "compact", "compactX", "compactY",
+    "compactWidth", "compactHeight", "sizedForBuild", "devX", "devY" }
 local MOTION_DEFAULTS = { rotate = MHT.Motion.StandardProfile.rotate, firstRotationAxis = 1 }
 
 local TAB_STATUS = {
@@ -16,6 +18,10 @@ function DeveloperWindow.New(window)
     local self = setmetatable({ window = window, tab = "test", testCase = "transform", testChoices = {} },
         DeveloperWindow)
     local UI, uiState = MHT.UI, window.uiState
+    -- In developer mode, the windows open at their default size and place after every /reload.
+    if MHT.DEV_MODE then
+        for _, key in ipairs(LAYOUT_KEYS) do uiState[key] = nil end
+    end
     uiState.calibration = uiState.calibration or {}
     uiState.calibration.measurements = uiState.calibration.measurements or {}
     if MHT.DEV_MODE then MHT.ItemProfiles.UseSaved(uiState.calibration.measurements) end

@@ -12,14 +12,17 @@ function SettingsPanel.New(window, parent)
     local UI = MHT.UI
     local inset = UI.Surface(parent, 364, 512, "settings")
     inset:SetPoint("TOPLEFT", 18, -104)
+    self.frame = inset
     local scroll = CreateFrame("ScrollFrame", nil, inset)
     scroll:SetPoint("TOPLEFT", 14, -14)
-    scroll:SetSize(WIDTH, VIEWPORT)
+    scroll:SetPoint("BOTTOMLEFT", 14, 14)
+    scroll:SetWidth(WIDTH)
     local body = CreateFrame("Frame", nil, scroll)
     body:SetSize(WIDTH, VIEWPORT)
     scroll:SetScrollChild(body)
     UI.Scrollbar(scroll, body)
     self.scroll, self.body = scroll, body
+    scroll:HookScript("OnSizeChanged", function() self:FitBody() end)
     self.sections = {
         shapes = MHT.ShapePanel.New(window, self, body),
         sketch = MHT.SketchPanel.New(window, self, body),
@@ -37,8 +40,13 @@ function SettingsPanel:Plan()
 end
 
 function SettingsPanel:SetContentHeight(height)
-    height = math.max(VIEWPORT, height)
+    self.contentHeight = height
+    self:FitBody()
+end
+
+function SettingsPanel:FitBody()
     local scroll = self.scroll
+    local height = math.max(scroll:GetHeight(), self.contentHeight or 0)
     local maximum = math.max(0, height - scroll:GetHeight())
     if scroll:GetVerticalScroll() > maximum then scroll:SetVerticalScroll(maximum) end
     self.body:SetHeight(height)

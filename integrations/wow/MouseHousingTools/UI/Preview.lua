@@ -204,9 +204,13 @@ function Preview:Draw()
         local center = { (span.low[1] + span.high[1]) / 2, (span.low[2] + span.high[2]) / 2,
             (span.low[3] + span.high[3]) / 2 }
         local projected = project(center)
+        -- The room is placed with the framing, so changing settings moves only the items.
         framing = { center = center,
             scale = math.min(width / math.max(0.01, high[1] - low[1]), height / math.max(0.01, high[2] - low[2])),
-            shift = { (low[1] + high[1]) / 2 - projected[1], (low[2] + high[2]) / 2 - projected[2] } }
+            shift = { (low[1] + high[1]) / 2 - projected[1], (low[2] + high[2]) / 2 - projected[2] },
+            floor = floor or source and source.z or world.low[3],
+            middle = #plan.items > 0
+                and { (world.low[1] + world.high[1]) / 2, (world.low[2] + world.high[2]) / 2 } or { 0, 0 } }
         if not self.compact then self.framing = framing end
     end
     local scale = framing.scale * self.zoom
@@ -224,11 +228,9 @@ function Preview:Draw()
 
     local extra = {}
     local room = not self.compact and MHT.Rooms.Get(self.roomID)
-    floor = floor or source and source.z or world.low[3]
+    floor = framing.floor
     if room then
-        local middle = #plan.items > 0
-            and { (world.low[1] + world.high[1]) / 2, (world.low[2] + world.high[2]) / 2 } or { 0, 0 }
-        for _, line in ipairs(MHT.Rooms.Lines(room, middle, floor, self.yaw)) do
+        for _, line in ipairs(MHT.Rooms.Lines(room, framing.middle, floor, self.yaw)) do
             extra[#extra + 1] = { a = toScreen(line.a), b = toScreen(line.b), owner = ROOM_LINES[line.style] }
         end
     end
