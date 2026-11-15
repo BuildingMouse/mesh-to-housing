@@ -38,7 +38,7 @@ function API:PendingInfo()
     return C_HousingBasicMode.GetSelectedDecorInfo()
 end
 
-local function dyeKey(slots)
+function API.DyeKey(slots)
     local values = {}
     for _, slot in ipairs(slots or {}) do
         if slot.dyeColorID and slot.dyeColorID ~= 0 then
@@ -48,30 +48,38 @@ local function dyeKey(slots)
     table.sort(values)
     return table.concat(values, ";")
 end
-API.DyeKey = dyeKey
-
-function API:Stock(source, anyColor)
+-- The source's decor entry and its variants in storage, in any color.
+function API:Stored(source)
     local entryID = { entryType = Enum.HousingCatalogEntryType.Decor, recordID = source.decorID }
     local entry = C_HousingCatalog.GetCatalogEntryInfo(entryID)
     if not entry then return nil, "Item information is not ready. Try again." end
-    local signature = dyeKey(source.dyeSlots)
-    local stock = { count = 0, variants = {}, storedVariants = {}, name = entry.name, cost = entry.placementCost }
+    local variants = {}
     for _, variant in ipairs(C_HousingCatalog.GetAllVariantInfosForEntry(entryID)) do
-        if variant.numStored > 0 and (anyColor or dyeKey(variant.dyeSlots) == signature) then
+        if variant.numStored > 0 then variants[#variants + 1] = variant end
+    end
+    return entry, variants
+end
+
+-- Copies in storage that match the source's colors.
+function API:Stock(source)
+    local entry, stored = self:Stored(source)
+    if not entry then return nil, stored end
+    local signature = API.DyeKey(source.dyeSlots)
+    local stock = { count = 0, variants = {}, name = entry.name, cost = entry.placementCost }
+    for _, variant in ipairs(stored) do
+        if API.DyeKey(variant.dyeSlots) == signature then
             stock.count = stock.count + variant.numStored
             stock.variants[#stock.variants + 1] = variant.entryVariantID
-            stock.storedVariants[#stock.storedVariants + 1] = variant
         end
     end
     return stock
 end
 
-function API:CheckStock(source, count, anyColor)
-    local stock, reason = self:Stock(source, anyColor)
+function API:CheckStock(source, count)
+    local stock, reason = self:Stock(source)
     if not stock then return nil, reason end
     if stock.count < count then
-        return nil, string.format("%d %scopies in storage; %d needed. Source item is kept.",
-            stock.count, anyColor and "" or "matching ", count)
+        return nil, string.format("%d matching copies in storage; %d needed.", stock.count, count)
     end
     local maximum = C_HousingDecor.GetMaxPlacementBudget()
     local spent = C_HousingDecor.GetSpentPlacementBudget()
@@ -125,10 +133,6 @@ end
 
 function API:CycleRotationAxis()
     C_HousingExpertMode.SelectNextRotationAxis()
-end
-
-function API:PrecisionSubmode()
-    return C_HousingExpertMode.GetPrecisionSubmode()
 end
 
 function API:SaveSettings()

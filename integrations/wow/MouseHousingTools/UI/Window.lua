@@ -3,22 +3,53 @@ local Window = {}
 Window.__index = Window
 MHT.Window = Window
 
-local function parentCenter(parent)
-    local x, y = parent:GetCenter()
-    return x or 0, y or 0
+-- The main window.
+
+local MODES = { { "shapes", "Shapes" }, { "sketch", "3D Sketch" }, { "sculpt", "3D Sculpt" } }
+-- Default and smallest sizes. The full and the small window keep their saved state under these prefixes.
+local SIZES = {
+    window = { width = 1000, height = 724, minWidth = 820, minHeight = 560 },
+    compact = { width = 640, height = 500, minWidth = 430, minHeight = 400 },
+}
+
+local function centerOffset(frame)
+    local x, y = frame:GetCenter()
+    local px, py = (frame:GetParent() or UIParent):GetCenter()
+    if x and y then return x - (px or 0), y - (py or 0) end
 end
 
 function Window.New(settings, uiState)
-    uiState = uiState or {}
-    if MHT.Layout.Solids[settings.shape] then settings.shape = "stairs" end
+    local models = uiState.models or {}
+    uiState.models = models
+    models.percent, models.itemPercent = models.percent or 100, models.itemPercent or 100
+    if not MHT.ModelLibrary.Get(models.id) then models.id = MHT.ModelLibrary.Entries[1].id end
+    if models.source ~= "import" then models.source = "library" end
 
-    local self = setmetatable({ settings = settings, uiState = uiState,
-                               controls = {}, inputs = {} }, Window)
+    local self = setmetatable({ settings = settings, uiState = uiState, modelSettings = uiState.models,
+        mode = "shapes" }, Window)
+    self.placement = MHT.Placement.New(MHT.Housing, function(message, completed, total)
+        self:OnPlacementMessage(message, completed, total)
+    end)
+    self:CreateFrame()
+    self.developer = MHT.DeveloperWindow.New(self)
+    self.settingsPanel = MHT.SettingsPanel.New(self, self.frame)
+    self:CreatePreview()
+    self.footer = MHT.Footer.New(self, self.frame)
+    self.compact = self.uiState.compact == true
+    self:Layout()
+    self:ApplySavedPosition(UIParent)
+    self.chrome = MHT.EditorChrome.New()
+    self:SelectMode("shapes")
+    self:RestoreBuild()
+    self:FitToBuild()
+    self.frame:Hide()
+    return self
+end
+
+function Window:CreateFrame()
     local UI = MHT.UI
-    local frame = UI.Panel(UIParent, 810, 610)
+    local frame = UI.Surface(UIParent, SIZES.window.width, SIZES.window.height, "window")
     self.frame = frame
-
-    frame:SetPoint("CENTER", UIParent, "CENTER", uiState.windowX or 0, uiState.windowY or 0)
     frame:SetFrameStrata("FULLSCREEN_DIALOG")
     frame:SetFrameLevel(100)
     frame:SetClampedToScreen(true)
@@ -26,230 +57,325 @@ function Window.New(settings, uiState)
     frame:SetMovable(true)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
-
-    frame:SetScript("OnDragStart", function() if not self:Busy() then frame:StartMoving() end end)
-
+    frame:SetScript("OnDragStart", function() frame:StartMoving() end)
     frame:SetScript("OnDragStop", function()
         frame:StopMovingOrSizing()
         self:SavePosition()
     end)
-
-    UI.Text(frame, "MouseHousingTools", 18, 15, 500, "GameFontNormalLarge")
-    UI.Button(frame, "X", 758, 10, 34, function() frame:Hide() end)
-
-    self.shapesTab = UI.Button(frame, "Shapes", 18, 46, 120, function() self:Mode("shapes") end)
-    self.objectsTab = UI.Button(frame, "3D Objects", 146, 46, 120, function() self:Mode("objects") end)
-    self.testTab = UI.Button(frame, "Tests", 274, 46, 130, function() self:Mode("test") end)
-    self.captureTab = UI.Button(frame, "Movement capture", 412, 46, 145, function() self:Mode("capture") end)
-    self.calibrationTab = UI.Button(frame, "Calibrate", 565, 46, 120, function() self:Mode("calibration") end)
-    self.cornersTab = UI.Button(frame, "Corner test", 693, 46, 100, function() self:Mode("corners") end)
-
-    self.objects = CreateFrame("Frame", nil, frame)
-    self.objects:SetAllPoints(frame)
-    UI.Text(self.objects, "3D Objects", 300, 240, 250, "GameFontNormalLarge")
-    UI.Text(self.objects, "Coming soon", 300, 275, 250)
-    self.objects:Hide()
-
-    self.content = CreateFrame("Frame", nil, frame)
-    self.content:SetAllPoints(frame)
-
-    self.stairs = UI.Button(self.content, "Stairs", 18, 82, 120, function() settings.shape = "stairs"; self:Refresh() end)
-    self.circle = UI.Button(self.content, "Circle", 146, 82, 120, function() settings.shape = "circle"; self:Refresh() end)
-    local fields = {
-        { "count", "Items" }, { "rotation", "Item rotation (deg)" },
-        { "slope", "Stair slope (deg)" }, { "spacing", "Straight step spacing" },
-        { "turns", "Stair turns (0 = straight)" }, { "radius", "Curve / circle radius" },
-        { "width", "Item width" }, { "depth", "Item depth" },
-        { "thickness", "Item thickness" }, { "clearance", "Source clearance" },
-    }
-
-    for i, field in ipairs(fields) do
-        local control = UI.Number(self.content, field[2], 18 + ((i - 1) % 2) * 133,
-            120 + math.floor((i - 1) / 2) * 54, settings[field[1]], function(value)
-                settings[field[1]] = value
-                self:Refresh()
-            end)
-        self.controls[#self.controls + 1] = control
-        self.inputs[field[1]] = control
-    end
-
-    self.scaleLabel = UI.Text(self.content, "", 18, 397, 250)
-    self.scale = CreateFrame("Slider", nil, self.content, "BackdropTemplate")
-    self.scale:SetPoint("TOPLEFT", 20, -425)
-    self.scale:SetSize(238, 15)
-    self.scale:SetOrientation("HORIZONTAL")
-    self.scale:SetMinMaxValues(0.2, 2)
-    self.scale:SetValueStep(0.01)
-    self.scale:SetObeyStepOnDrag(true)
-    self.scale:SetThumbTexture("Interface/Buttons/UI-SliderBar-Button-Horizontal")
-    self.scale:SetBackdrop({ bgFile = "Interface/Buttons/WHITE8X8" })
-    self.scale:SetBackdropColor(0.2, 0.24, 0.3, 1)
-    self.scale:SetValue(settings.scale)
-    self.scale:SetScript("OnValueChanged", function(_, value)
-        settings.scale = math.floor(value * 100 + 0.5) / 100
-        self:Refresh()
-    end)
-    self.controls[#self.controls + 1] = self.scale
-
-    UI.Text(
-        self.content,
-        "Movement uses fixed timing: 1 coordinate unit = 1 second. Scaling uses about 5 seconds for 100% to 200%. Curved stair spacing follows radius, turns, and item count.",
-        18, 450, 260
-    )
-
-    self.preview = MHT.Preview.New(self.content)
-    self.summary = UI.Text(self.content, "", 302, 510, 490)
-    self.status = UI.Text(frame, "", 18, 563, 774)
-
-    self.testsFrame = CreateFrame("Frame", nil, frame)
-    self.testsFrame:SetAllPoints(frame)
-    self.testCase, self.testChoices = "transform", {}
-    self.testChoices.transform = UI.Button(self.testsFrame, "Transform", 18, 82, 120,
-        function() self:TestCase("transform") end)
-    for i, case in ipairs(MHT.TestFiguresPanel.Cases) do
-        local id = case.id
-        self.testChoices[id] = UI.Button(self.testsFrame, case.name, 146 + (i - 1) * 145, 82, 137,
-            function() self:TestCase(id) end)
-    end
-    self.testChoices.resize = UI.Button(self.testsFrame, "Resize", 581, 82, 137,
-        function() self:TestCase("resize") end)
-    self.testContent = CreateFrame("Frame", nil, self.testsFrame)
-    self.testContent:SetAllPoints(self.testsFrame)
-    uiState.figureTests = uiState.figureTests or {}
-    self.figures = MHT.TestFiguresPanel.New(self.testsFrame,
-        function() self:StartFigureTest() end, function() self:EndPlacement() end, uiState.figureTests)
-    uiState.transformTest = uiState.transformTest or {}
-    self.testSettings = uiState.transformTest
-    -- Replace the old unmeasured 90 deg/sec default once; retain custom speeds.
-    if not uiState.rotationSpeedVersion then
-        if self.testSettings.rotate == 90 then self.testSettings.rotate = MHT.Motion.StandardProfile.rotate end
-        uiState.rotationSpeedVersion = 1
-    end
-    local testFields = {
-        { "x", "Shift X", 0 }, { "y", "Shift Y", 0 }, { "z", "Shift Z", 0 },
-        { "rx", "Rotate X (deg)", 0 }, { "ry", "Rotate Y (deg)", 0 }, { "rz", "Rotate Z (deg)", 45 },
-        { "rotate", "Rotation deg / sec", MHT.Motion.StandardProfile.rotate },
-        { "firstRotationAxis", "First cycled axis (1-3)", 1 },
-    }
-    self.testInputs = {}
-    for i, field in ipairs(testFields) do
-        if self.testSettings[field[1]] == nil then self.testSettings[field[1]] = field[3] end
-        local control = UI.Number(self.testContent, field[2], 18 + ((i - 1) % 3) * 260,
-            120 + math.floor((i - 1) / 3) * 60, self.testSettings[field[1]], function(value)
-                self.testSettings[field[1]] = value
-            end)
-        self.testInputs[#self.testInputs + 1] = control
-    end
-    UI.Text(self.testContent,
-        "Deselect the item, press Start, then click it in Advanced mode. This raw API test shifts the pivot and adds rotation on X, Y, Z one at a time. No pivot compensation; size stays unchanged. End cancels the test.",
-        18, 330, 740)
-    UI.Text(self.testContent,
-        "Use an item with all three rings. Test one nonzero angle at a time. Timing is an estimate; adjust deg / sec. First cycled axis: 1 = X, 2 = Y, 3 = Z. These rotation settings also apply to shapes.",
-        18, 390, 740)
-
-    uiState.calibration = uiState.calibration or {}
-    uiState.calibration.measurements = uiState.calibration.measurements or {}
-    self.placement = MHT.Placement.New(MHT.Housing, function(message, completed, total)
-        self:SetStatus(message, completed, total)
-        self.progress:SetText(total > 0 and string.format("%d / %d", completed, total) or "")
-        self.figures.progress:SetText(total > 0 and string.format("%d / %d", completed, total) or "")
-        self:Lock(self.placement:Busy())
-    end, uiState.calibration.measurements)
-    self.capture = MHT.CapturePanel.New(frame, MHT.Housing, function() self:StartCapture() end, function(message)
-        if not self.calibration or not self.calibration:Busy() then self:SetStatus(message) end
-        self:Lock(self.placement:Busy())
-    end)
-    self.calibration = MHT.CalibrationPanel.New(frame, MHT.Housing, self.capture, uiState.calibration,
-        function() self:StartCalibration() end, function(message)
-        self:SetStatus(message)
-        self:Lock(self.placement:Busy())
-    end, function() self:StartCalibrationTest() end)
-    uiState.resizeTest = uiState.resizeTest or {}
-    self.resizeTest = MHT.ResizeTestPanel.New(self.testsFrame, self.calibration.resizePanel.controller,
-        uiState.resizeTest, uiState.calibration, function() self:StartResizeTest() end,
-        function() self:EndPlacement() end, function(message) self:SetStatus(message) end)
-    self.corners = MHT.CornerTestPanel.New(frame, MHT.Housing, uiState.calibration.measurements,
-        function(id) self:StartCornerTest(id) end, function(message, completed, total)
-        self:SetStatus(message, completed, total)
-        self:Lock(self.placement:Busy())
-    end)
-
-    self.start = UI.Button(self.content, "Start", 18, 525, 95, function() self:StartPlacement() end)
-    self.abort = UI.Button(self.content, "Abort", 121, 525, 95, function() self:EndPlacement() end)
-    self.progress = UI.Text(self.content, "", 227, 532, 70)
-    self.testStart = UI.Button(self.testContent, "Start", 18, 490, 95, function() self:StartTest() end)
-    self.testAbort = UI.Button(self.testContent, "End", 121, 490, 95, function() self:EndPlacement() end)
-
     frame:SetScript("OnHide", function() self:SavePosition() end)
+    -- Escape closes the window.
+    _G.MouseHousingToolsWindow = frame
+    table.insert(UISpecialFrames, "MouseHousingToolsWindow")
 
-    self:Refresh()
-    self:Lock(false)
-    self:Mode("shapes")
-    frame:Hide()
-    return self
+    self.logo = MHT.Theme.Logo(frame, 18, 4, 54)
+    self.title = UI.Text(frame, "Mouse Housing Tools", 84, 20, 540, "GameFontNormalLarge")
+    self.title:SetTextColor(unpack(MHT.Theme.Colors.gold))
+    local tabs = CreateFrame("Frame", nil, frame)
+    tabs:SetPoint("TOPLEFT", 18, -60)
+    tabs:SetPoint("TOPRIGHT", -18, -60)
+    tabs:SetHeight(38)
+    self.tabs = {}
+    for i, tab in ipairs(MODES) do
+        local mode = tab[1]
+        self.tabs[mode] = UI.Button(tabs, tab[2], (i - 1) * 138, 0, 132, function() self:SelectMode(mode) end, "tab", 34)
+    end
+    UI.Rule(tabs, 38, 964):SetPoint("TOPRIGHT", 0, -38)
+    self.tabFrame = tabs
+    self.close = UI.CloseButton(frame, 0, 0, 28, function() frame:Hide() end)
+    self.close:ClearAllPoints()
+    self.sizeButton = UI.IconButton(frame, "shrink", 0, 0, 28, 14, function() self:ToggleCompact() end)
+    self.sizeButton:ClearAllPoints()
+    self.sizeButton:SetPoint("TOPRIGHT", self.close, "TOPLEFT", -6, 0)
+    UI.Tooltip(self.sizeButton, "Window size", "Switch between the full window and a small preview. Drag the bottom-right corner to resize either one.")
+    if MHT.DEV_MODE then
+        self.developerButton = UI.Button(frame, "Developer tools", 0, 0, 132,
+            function() self.developer:Open("test") end, nil, 30)
+        self.developerButton:ClearAllPoints()
+        self.developerButton:SetPoint("TOPRIGHT", self.sizeButton, "TOPLEFT", -8, 1)
+    end
+    self.grip = UI.ResizeGrip(frame, function() self:SaveSize() end)
+end
+
+-- The small window keeps only the preview and the footer.
+function Window:Layout()
+    local compact, frame, state, footer = self.compact, self.frame, self.uiState, self.footer
+    local prefix = self:StatePrefix()
+    local size = SIZES[prefix]
+    frame:SetResizeBounds(size.minWidth, size.minHeight)
+    frame:SetSize(math.max(size.minWidth, state[prefix .. "Width"] or size.width),
+        math.max(size.minHeight, state[prefix .. "Height"] or size.height))
+    local logo = compact and 28 or 54
+    self.logo:SetSize(logo, logo)
+    self.logo:SetPoint("TOPLEFT", compact and 12 or 18, compact and -8 or -4)
+    MHT.Theme.Font(self.title, compact and "heading" or "title")
+    self.title:SetPoint("TOPLEFT", compact and 48 or 84, compact and -14 or -20)
+    self.close:SetPoint("TOPRIGHT", compact and -10 or -18, compact and -8 or -17)
+    self.sizeButton.icon:SetShape(compact and "expand" or "shrink")
+    self.tabFrame:SetShown(not compact)
+    self.settingsPanel.frame:SetShown(not compact)
+    if self.developerButton then self.developerButton:SetShown(not compact) end
+
+    -- The settings column keeps its width, and the preview and the footer take the rest.
+    local margin, gap = compact and 12 or 18, compact and 8 or 12
+    local panel = self.previewPanel
+    panel:ClearAllPoints()
+    footer.frame:ClearAllPoints()
+    footer:SetCompact(compact)
+    footer.frame:SetPoint("BOTTOMLEFT", margin, margin)
+    footer.frame:SetPoint("BOTTOMRIGHT", -margin, margin)
+    panel:SetPoint("TOPLEFT", compact and 12 or 394, compact and -44 or -104)
+    panel:SetPoint("BOTTOMRIGHT", footer.frame, "TOPRIGHT", 0, gap)
+    self.settingsPanel.frame:SetPoint("BOTTOMLEFT", footer.frame, "TOPLEFT", 0, gap)
+    self.previewHeading:SetShown(not compact)
+    self.roomPicker:SetShown(not compact)
+    self.preview:SetRoom(compact and "none" or self.uiState.previewRoom)
+    self.preview.frame:SetPoint("TOPLEFT", 14, compact and -14 or -44)
+    self.preview.frame:SetPoint("BOTTOMRIGHT", -14, compact and 14 or 58)
+    self.resetView:ClearAllPoints()
+    if compact then
+        self.resetView:SetPoint("TOPRIGHT", -20, -20)
+    else
+        self.resetView:SetPoint("BOTTOMRIGHT", -14, 16)
+    end
+end
+
+function Window:SetCompact(compact)
+    if self.compact == compact then return end
+    self:SavePosition()
+    self.compact = compact
+    self.uiState.compact = compact or nil
+    self:Layout()
+    self:ApplySavedPosition(self.frame:GetParent())
+end
+
+function Window:ToggleCompact()
+    self:SetCompact(not self.compact)
+end
+
+-- A build only needs the preview, so the window shrinks once when a build starts.
+-- When the build ends, finished or ended by the player, the full window comes back.
+function Window:FitToBuild()
+    local state = self.uiState
+    local running = self.placement:Busy() or self.placement:HasSession()
+    if running and not state.sizedForBuild then
+        state.sizedForBuild = true
+        self:SetCompact(true)
+    elseif not running and state.sizedForBuild then
+        state.sizedForBuild = nil
+        self:SetCompact(false)
+    end
+end
+
+function Window:CreatePreview()
+    local UI = MHT.UI
+    local panel = UI.Surface(self.frame, 588, 512, "deep")
+    self.previewPanel = panel
+    self.previewHeading = UI.Heading(panel, "Preview", 14, 14, 270)
+    self.preview = MHT.Preview.New(panel)
+    MHT.Theme.Skin(self.preview.frame, nil)
+
+    local rooms = {}
+    for _, room in ipairs(MHT.Rooms.Entries) do rooms[#rooms + 1] = { id = room.id, name = "Room: " .. room.name } end
+    rooms[#rooms + 1] = { id = "none", name = "Room: None" }
+    local roomID = self.uiState.previewRoom
+    if roomID ~= "none" and not MHT.Rooms.Get(roomID) then roomID = MHT.Rooms.DEFAULT_ID end
+    self.uiState.previewRoom = roomID
+    local picker = UI.Dropdown(panel, 14, 470, 166, rooms, roomID, function(id)
+        self.uiState.previewRoom = id
+        self.preview:SetRoom(id)
+    end)
+    self.roomPicker = picker
+    picker:ClearAllPoints()
+    picker:SetPoint("BOTTOMLEFT", 14, 12)
+    picker.menu:ClearAllPoints()
+    picker.menu:SetPoint("BOTTOMLEFT", picker, "TOPLEFT", 0, 2)
+    UI.Tooltip(picker, "Preview room",
+        "Small is twice as wide as Tiny, Medium three times and Large four times. All rooms are as high as Tiny.")
+    self.preview:SetRoom(roomID)
+    local reset = UI.ResetButton(panel, 0, 0, function() self.preview:ResetView() end)
+    -- The small window puts the button over the preview's corner.
+    reset:SetFrameLevel(self.preview.frame:GetFrameLevel() + 2)
+    self.resetView = reset
+    UI.Tooltip(reset, "Reset view", "Drag to turn the preview, right-drag to move it, and scroll to zoom.")
+end
+
+-- A build paused before a /reload comes back paused.
+function Window:RestoreBuild()
+    local saved = self.uiState.buildProgress
+    if not saved then return end
+    if self.tabs[saved.mode] then self:SelectMode(saved.mode) end
+    if not self.placement:RestoreBuild(saved.placement) then self.uiState.buildProgress = nil end
+end
+
+function Window:SaveBuildProgress()
+    local placement = self.placement
+    self.uiState.buildProgress = placement.stage == "building"
+        and { placement = placement:SaveBuild(), mode = self.mode } or nil
 end
 
 function Window:Busy()
-    return self.placement:Busy() or self.capture:Busy() or self.calibration:Busy() or self.corners:Busy()
+    return self.placement:Busy() or self.developer:Busy()
 end
 
-function Window:Update(elapsed)
-    self.capture:Update(elapsed)
-    self.placement:Update(elapsed)
-    self.calibration:Update(elapsed)
-    if self.calibration.resizePanel.controller:Busy() then self.resizeTest:Refresh(true) end
-    self.corners:Update(elapsed)
+-- Settings stay fixed from Prepare until the build ends.
+function Window:Locked()
+    return self:Busy() or self.placement:HasSession()
 end
 
-function Window:OnEvent(event, ...)
-    self.capture:OnEvent(event, ...)
-    self.placement:OnEvent(event, ...)
-    self.calibration:OnEvent(event, ...)
-    self.corners:OnEvent(event, ...)
+function Window:SelectMode(mode)
+    if self:Locked() then return end
+    self.mode = mode
+    self.settingsPanel:ScrollToTop()
+    self:Refresh()
 end
 
-function Window:SavePosition()
-    local parent = self.frame:GetParent() or UIParent
-    local x, y = self.frame:GetCenter()
-    local px, py = parentCenter(parent)
-    if x and y then
-        self.uiState.windowX = x - px
-        self.uiState.windowY = y - py
+-- Rebuilds the plan from the settings.
+function Window:Refresh()
+    self.settingsPanel:Refresh()
+    local plan, reason = self.settingsPanel:Plan()
+    self.plan = plan
+    self.preview:SetPlan(plan, self.settingsPanel:Section().points, self:PreviewView())
+    self:UpdateProgress(true)
+    self:SetStatus(plan and self:StartHint(#plan.items) or reason or "")
+    self:UpdateControls()
+end
+
+function Window:PreviewView()
+    if self.mode ~= "shapes" then return self.mode end
+    local shape = self.settings.shape
+    if shape == "circle" and self.settings.circle.orientation == "vertical" then return "vertical" end
+    local stairs = self.settings.stairs
+    if shape == "stairs" and stairs.curveEnabled and stairs.curve ~= 0 then
+        return stairs.curve > 0 and "curveRight" or "curveLeft"
+    end
+    return shape
+end
+
+function Window:StartHint(count)
+    if self.useExistingPile then
+        return string.format("Stack %d copies of the item in one spot, then press Build and click them one at a time.", count)
+    end
+    return "Press Prepare items, then hover the item to copy and hold the cursor still."
+end
+
+function Window:UseExistingPile(checked)
+    if self:Locked() then return end
+    self.useExistingPile = checked
+    self:Refresh()
+end
+
+-- Prepares the pile, builds from it once it is ready, and pauses or resumes the build.
+function Window:StartPlacement()
+    local placement = self.placement
+    if placement:CanPause() then placement:Pause(); return end
+    if self:Busy() then return end
+    local ok, started, reason
+    if placement:Ready() or placement:Paused() then
+        ok, started, reason = pcall(placement.Build, placement)
+    else
+        self.settingsPanel:CommitEdits()
+        self:Refresh()
+        if not self.plan then return end
+        local start = self.useExistingPile and placement.BuildFromPile or placement.Prepare
+        ok, started, reason = pcall(start, placement, self.plan)
+    end
+    if not ok then placement:Abort(MHT.Util.ErrorText(started))
+    elseif not started then self:SetStatus(reason) end
+end
+
+-- Ends whatever runs: a dev tool, or a build.
+function Window:EndPlacement(message)
+    if self.developer:Stop(message) then return end
+    self.placement:End(message)
+end
+
+-- A build pauses on an error; anything else ends.
+function Window:OnError(message)
+    if self.developer:Stop(message) then return end
+    self.placement:Abort(message)
+end
+
+function Window:SkipItem()
+    local ok, skipped, reason = pcall(self.placement.Skip, self.placement)
+    if not ok then self.placement:Abort(MHT.Util.ErrorText(skipped))
+    elseif not skipped then self:SetStatus(reason) end
+end
+
+function Window:SetStatus(message)
+    self.footer:SetStatus(message)
+end
+
+function Window:OnPlacementMessage(message, completed, total)
+    self:SaveBuildProgress()
+    self:FitToBuild()
+    self:SetStatus(message)
+    self.developer:OnPlacementMessage(message, completed, total)
+    self:UpdateProgress()
+    self:UpdateControls()
+end
+
+function Window:UpdateProgress(reset)
+    local placement, footer = self.placement, self.footer
+    local running = not reset and (placement:Busy() or placement:HasSession()) and placement.plan ~= nil
+    local plan = running and placement.plan or self.plan
+    local total = plan and #plan.items or 0
+    footer:SetCount(self:CountText(total, running))
+    if running then
+        footer:SetTime(placement:RemainingSeconds())
+        footer:SetProgress(not placement:Ready() and placement:Progress() or nil)
+        self.preview:SetItemLooks(self:ItemLooks())
+    else
+        self.preview:SetItemLooks({})
+        footer:SetTime(plan and MHT.Placement.Estimate(plan, self.useExistingPile))
+        footer:SetProgress(nil)
     end
 end
 
-function Window:ApplySavedPosition(parent)
-    parent = parent or UIParent
-    self.frame:ClearAllPoints()
-    self.frame:SetPoint(
-        "CENTER",
-        parent,
-        "CENTER",
-        self.uiState.windowX or 0,
-        self.uiState.windowY or 0
-    )
+-- The current item stays highlighted between moves, so the preview always shows what comes next.
+function Window:ItemLooks()
+    local placement, looks = self.placement, {}
+    if placement.stage ~= "building" then return looks end
+    local _, current = placement:Current()
+    for index, item in ipairs(placement.items) do
+        looks[index] = index == current and "placing" or item.state == "saved" and "built" or "waiting"
+    end
+    return looks
 end
 
-function Window:SetHousingParent(parent)
-    parent = parent or UIParent
-
-    if self.frame:GetParent() == parent then return end
-
-    self:SavePosition()
-    local wasShown = self.frame:IsShown()
-
-    self.frame:SetParent(parent)
-    self:ApplySavedPosition(parent)
-    self.frame:SetFrameStrata("FULLSCREEN_DIALOG")
-    self.frame:SetFrameLevel((parent.GetFrameLevel and parent:GetFrameLevel() or 0) + 90)
-    self.capture:SetHousingParent(parent)
-
-    self.frame:SetShown(wasShown)
+function Window:CountText(total, running)
+    local placement = self.placement
+    if total == 0 then return "Items: —" end
+    if not running then return string.format("%d items", total) end
+    if placement.stage == "preparing" then return string.format("Preparing %d / %d", placement.copiesCreated, total) end
+    if placement:Ready() then return string.format("%d copies ready", total) end
+    return string.format("%d / %d", placement:Completed(), total)
 end
 
-function Window:SetStatus(message, completed, total)
-    self.status:SetText(message)
-    if self.onStatus then self.onStatus(message, completed, total) end
+function Window:UpdateControls()
+    local placement, developer = self.placement, self.developer
+    local busy, locked = self:Busy(), self:Locked()
+    developer:UpdateControls(placement:Busy() or placement:HasSession(), locked)
+    self.settingsPanel:UpdateControls(locked)
+    for mode, tab in pairs(self.tabs) do
+        tab:SetEnabled(not locked)
+        tab:SetSelected(self.mode == mode)
+    end
+    if self.developerButton then self.developerButton:SetEnabled(not locked) end
+    local canStart = placement:CanPause()
+        or not busy and (placement:Ready() or placement:Paused() or not locked and self.plan ~= nil)
+    self.footer:Update(placement, canStart, locked, self.useExistingPile)
+end
+
+function Window:Update(elapsed)
+    self.developer:Update(elapsed)
+    self.placement:Update(elapsed)
+    if self.placement:Busy() then self:UpdateProgress() end
+    self.chrome:SetSuppressed(self.placement:Busy())
+end
+
+function Window:OnEvent(event, ...)
+    self.developer:OnEvent(event, ...)
+    self.placement:OnEvent(event, ...)
 end
 
 function Window:Toggle()
@@ -262,236 +388,40 @@ function Window:Toggle()
     end
 end
 
-function Window:StartPlacement()
-    if self:Busy() then return end
-    if self.mode == "test" then
-        if self.testCase == "transform" then self:StartTest()
-        elseif self.testCase == "resize" then self:StartResizeTest()
-        else self:StartFigureTest() end
-        return
-    end
-    if self.mode == "capture" then self:StartCapture(); return end
-    if self.mode == "calibration" then self:StartCalibration(); return end
-    if self.mode == "corners" then self:StartCornerTest(); return end
-
-    self:Mode("shapes")
-    self:Refresh()
-    if not self.plan then return end
-    if not self:ValidRotationSettings() then return end
-
-    local ok, started, reason = pcall(
-        self.placement.Start,
-        self.placement,
-        self.plan,
-        self:MotionProfile(),
-        self.settings.placementWorkflow
-    )
-
-    if not ok then
-        self.placement:Abort(tostring(started))
-    elseif not started then
-        self:SetStatus(reason)
-    end
+function Window:StatePrefix()
+    return self.compact and "compact" or "window"
 end
 
-function Window:MotionProfile()
-    local profile = {}
-    for key, value in pairs(MHT.Motion.StandardProfile) do profile[key] = value end
-    profile.rotate = self.testSettings.rotate
-    profile.firstRotationAxis = self.testSettings.firstRotationAxis
-    return profile
+function Window:SavePosition()
+    local x, y = centerOffset(self.frame)
+    local prefix = self:StatePrefix()
+    if x then self.uiState[prefix .. "X"], self.uiState[prefix .. "Y"] = x, y end
 end
 
-function Window:StartTest()
-    if self:Busy() then return end
-    local s = self.testSettings
-    for _, key in ipairs({ "x", "y", "z", "rx", "ry", "rz" }) do
-        if type(s[key]) ~= "number" or s[key] ~= s[key] or math.abs(s[key]) > 360 then
-            self:SetStatus("Test offsets and angles must be between -360 and 360.")
-            return
-        end
-    end
-    if not self:ValidRotationSettings() then return end
-    local ok, started, reason = pcall(self.placement.StartTest, self.placement,
-        { x = s.x, y = s.y, z = s.z, turns = { x = s.rx, y = s.ry, z = s.rz } },
-        self:MotionProfile())
-    if not ok then
-        self.placement:Abort(tostring(started))
-    elseif not started then
-        self:SetStatus(reason)
-    end
+function Window:ApplySavedPosition(parent)
+    local state, prefix = self.uiState, self:StatePrefix()
+    self.frame:ClearAllPoints()
+    self.frame:SetPoint("CENTER", parent or UIParent, "CENTER",
+        state[prefix .. "X"] or state.windowX or 0, state[prefix .. "Y"] or state.windowY or 0)
 end
 
-function Window:StartCapture()
-    if self:Busy() then return end
-    local ok, started, reason = pcall(self.capture.Start, self.capture)
-    if not ok then
-        self.capture:Stop(tostring(started))
-    elseif not started then
-        self:SetStatus(reason)
-    end
+function Window:SaveSize()
+    local prefix = self:StatePrefix()
+    self.uiState[prefix .. "Width"], self.uiState[prefix .. "Height"] = self.frame:GetSize()
+    self:SavePosition()
+    self:ApplySavedPosition(self.frame:GetParent())
 end
 
-function Window:TestCase(id)
-    if self:Busy() then return end
-    if id ~= "transform" and id ~= "resize" and not self.figures:Select(id) then return end
-    if id == "resize" then self.resizeTest:Preview() end
-    self.testCase = id
-    self:Mode("test")
-    self:Lock(false)
-end
-
-function Window:StartFigureTest()
-    if self:Busy() or not self:ValidRotationSettings() then return end
-    local plan, errorMessage = self.figures:Prepare()
-    if not plan then self:SetStatus(errorMessage); return end
-    local ok, started, reason = pcall(self.placement.Start, self.placement,
-        plan, self:MotionProfile(), self.settings.placementWorkflow)
-    if not ok then self.placement:Abort(tostring(started))
-    elseif not started then self:SetStatus(reason) end
-end
-
-function Window:StartCalibration()
-    local kind = self.calibration.settings.kind
-    if self:Busy() or ((kind == "pivot" or kind == "axes") and not self:ValidRotationSettings()) then return end
-    self.calibration:Start(self:MotionProfile())
-end
-
-function Window:StartResizeTest()
-    if self:Busy() then return end
-    local percent = self.uiState.resizeTest.percent
-    if type(percent) ~= "number" or percent ~= percent or percent < 20 or percent > 200 then
-        self:SetStatus("Item size must be between 20% and 200%."); return
-    end
-    local c = self.calibration.resizePanel.controller
-    local ok, started, reason = pcall(c.Start, c, "corners", self.calibration.settings.workflow,
-        self:MotionProfile(), percent / 100)
-    if not ok then c:Abort(tostring(started)) elseif not started then self:SetStatus(reason) end
-end
-
-function Window:StartCalibrationTest()
-    if self:Busy() or (self.calibration.settings.kind == "pivot" and not self:ValidRotationSettings()) then return end
-    self.calibration:StartTest(self:MotionProfile())
-end
-
-function Window:StartCornerTest(id)
-    if self:Busy() or not self:ValidRotationSettings() then return end
-    self.corners:Start(id, self:MotionProfile())
-end
-
-function Window:ValidRotationSettings()
-    local s = self.testSettings
-    if type(s.rotate) ~= "number" or s.rotate ~= s.rotate or s.rotate <= 0 or s.rotate > 3600 then
-        self:SetStatus("Rotation speed must be greater than 0 and at most 3600 degrees / second.")
-        return false
-    end
-    if s.firstRotationAxis ~= 1 and s.firstRotationAxis ~= 2 and s.firstRotationAxis ~= 3 then
-        self:SetStatus("First cycled axis must be 1 (X), 2 (Y), or 3 (Z).")
-        return false
-    end
-    return true
-end
-
-function Window:EndPlacement(message)
-    if self.corners:Busy() then
-        self.corners:Abort(message)
-    elseif self.calibration:Busy() then
-        self.calibration:Abort(message)
-    elseif self.capture:Busy() or self.capture.bindingsInstalled then
-        self.capture:Stop(message)
-    else
-        self.placement:Abort(message)
-    end
-end
-
-function Window:Mode(mode)
-    if self:Busy() then return end
-    self.mode = mode
-    self.content:SetShown(mode == "shapes")
-    self.objects:SetShown(mode == "objects")
-    self.testsFrame:SetShown(mode == "test")
-    self.testContent:SetShown(mode == "test" and self.testCase == "transform")
-    self.figures.frame:SetShown(mode == "test" and self.testCase ~= "transform" and self.testCase ~= "resize")
-    self.resizeTest.frame:SetShown(mode == "test" and self.testCase == "resize")
-    self.capture.frame:SetShown(mode == "capture")
-    self.calibration.frame:SetShown(mode == "calibration")
-    self.corners.frame:SetShown(mode == "corners")
-    self.shapesTab:SetEnabled(mode ~= "shapes")
-    self.objectsTab:SetEnabled(mode ~= "objects")
-    self.testTab:SetEnabled(mode ~= "test")
-    self.captureTab:SetEnabled(mode ~= "capture")
-    self.calibrationTab:SetEnabled(mode ~= "calibration")
-    self.cornersTab:SetEnabled(mode ~= "corners")
-    if mode == "corners" then
-        self.corners:Refresh(true)
-        self:SetStatus("Run a named test, click the tile, then corners 1, 2, 3, 4. Restore the starting layout between cases.")
-    end
-    if mode == "test" then self:SetStatus(self.testCase == "transform"
-        and "Set shift and rotation, then Start and click an item in Advanced mode."
-        or "Start the test, then hover a calibrated tile at 100% size. Keep still while copies are created.") end
-    if mode == "capture" then self:SetStatus("Select an item in Advanced mode, then Start to capture movement keys.") end
-    if mode == "calibration" then self:SetStatus(self.calibration.settings.kind == "axes"
-        and "Choose an axis. In Advanced mode, select a placed copy and Start, or Start then click it."
-        or "Choose a test and axis. Deselect the item, then Start and hover the source.") end
-end
-
-function Window:Lock(busy)
-    local calibrating = self.calibration and self.calibration:Busy()
-    local corners = self.corners and self.corners:Busy()
-    self.capture:SetBlocked(busy or calibrating or corners)
-    if self.calibration then self.calibration:SetBlocked(busy or corners or (self.capture:Busy() and not calibrating)) end
-    if self.corners then self.corners:SetBlocked(busy or calibrating or self.capture:Busy()) end
-    busy = busy or calibrating
-    busy = busy or self.capture:Busy()
-    busy = busy or corners
-    for _, control in ipairs(self.controls) do control:SetEnabled(not busy) end
-
-    local stairs = self.settings.shape == "stairs"
-    self.inputs.slope:SetEnabled(not busy and stairs)
-    self.inputs.turns:SetEnabled(not busy and stairs)
-    self.inputs.spacing:SetEnabled(not busy and stairs and self.settings.turns == 0)
-    self.inputs.radius:SetEnabled(not busy and (not stairs or self.settings.turns ~= 0))
-    self.stairs:SetEnabled(not busy and self.settings.shape ~= "stairs")
-    self.circle:SetEnabled(not busy and self.settings.shape ~= "circle")
-    self.objectsTab:SetEnabled(not busy)
-    self.shapesTab:SetEnabled(not busy and self.mode ~= "shapes")
-    self.testTab:SetEnabled(not busy and self.mode ~= "test")
-    for id, button in pairs(self.testChoices) do button:SetEnabled(not busy and self.testCase ~= id) end
-    self.figures:SetBlocked(busy)
-    self.resizeTest:Refresh(busy)
-    self.captureTab:SetEnabled(not busy and self.mode ~= "capture")
-    self.calibrationTab:SetEnabled(not busy and self.mode ~= "calibration")
-    self.cornersTab:SetEnabled(not busy and self.mode ~= "corners")
-    for _, control in ipairs(self.testInputs) do control:SetEnabled(not busy) end
-    self.testStart:SetEnabled(not busy)
-    self.testAbort:SetEnabled(busy)
-    self.start:SetEnabled(not busy and self.plan ~= nil)
-    self.abort:SetEnabled(busy)
-end
-
-function Window:Refresh()
-    self.scaleLabel:SetText(string.format("Item size: %d%%", math.floor(self.settings.scale * 100 + 0.5)))
-
-    local plan, reason = MHT.Layout.Build(self.settings)
-    self.plan = plan
-    self.preview:SetPlan(plan, self.settings.shape)
-
-    if plan then
-        local batch = (self.settings.placementWorkflow or MHT.Placement.DEFAULT_WORKFLOW) == "batch"
-        local source = self.settings.shape == "stairs" and "Gold block" or "Gold dot"
-        self.summary:SetText(string.format(
-            "%d new items. %s = source/start; blue = shape.\n%s",
-            #plan.items, source,
-            batch and "Create the full stack first; then click copies in Advanced mode."
-                or "Place one copy, click it to move, then return to the source and repeat."
-        ))
-        self:SetStatus(batch
-            and "Hover the source and press Ctrl+S. Keep the mouse still while copies are created; then click them one at a time."
-            or "Hover the source and press Ctrl+S. Keep still until the copy is placed; click it to move, then hover the original source again.")
-    else
-        self.summary:SetText("")
-        self:SetStatus(reason)
-    end
-
-    self:Lock(self.placement:Busy())
+-- In the housing editor, only its child frames stay visible.
+function Window:SetHousingParent(parent)
+    parent = parent or UIParent
+    if self.frame:GetParent() == parent then return end
+    self:SavePosition()
+    local shown = self.frame:IsShown()
+    self.frame:SetParent(parent)
+    self:ApplySavedPosition(parent)
+    self.frame:SetFrameStrata("FULLSCREEN_DIALOG")
+    self.frame:SetFrameLevel((parent.GetFrameLevel and parent:GetFrameLevel() or 0) + 90)
+    self.developer:SetParent(parent)
+    self.frame:SetShown(shown)
 end

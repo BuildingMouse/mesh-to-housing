@@ -75,6 +75,7 @@ function Resize:Save()
     record.units = copy(draft.units)
     item.name, item.resizePivot = draft.name or item.name, record
     draft.measurement = copy(record)
+    MHT.ItemProfiles.UseSaved(self.measurements)
     self:SetState("review", "Resize pivot saved. Placement now uses it for this item.")
     return true
 end
@@ -101,14 +102,15 @@ function Resize:Start(mode, workflow, profile, scale)
 end
 
 function Resize:PrepareSource(source)
-    local dimensions, reason = MHT.ItemProfiles.Dimensions(source.decorID, self.measurements)
+    local dimensions, reason = MHT.ItemProfiles.Dimensions(source.decorID)
     if not dimensions then return nil, reason end
     self.dimensions = dimensions
     self.lift = dimensions[3] * (self.mode == "corners" and math.max(1, self.scale) or 1)
     if self.mode == "corners" then
-        local measured
-        self.pivot, measured = MHT.ItemProfiles.ResizePivot(source.decorID, self.measurements)
-        if not measured then return nil, "Save a resize pivot for this item before the corner test." end
+        if not MHT.ItemProfiles.Logged(source.decorID).resizePivot then
+            return nil, "Save a resize pivot for this item before the corner test."
+        end
+        self.pivot = MHT.ItemProfiles.Calibration(source.decorID).resizePivot
     end
     return true
 end

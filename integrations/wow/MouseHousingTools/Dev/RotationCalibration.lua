@@ -103,6 +103,7 @@ function Calibration:Save()
     self.measurements[self.draft.decorID] = item
     item.name = self.draft.name or item.name
     item.rotationAxes = MHT.Util.Copy(self.draft.axes)
+    MHT.ItemProfiles.UseSaved(self.measurements)
     self:SetState("review", "Rotation axes saved for this item. Shape placement now uses these answers.")
     return true
 end

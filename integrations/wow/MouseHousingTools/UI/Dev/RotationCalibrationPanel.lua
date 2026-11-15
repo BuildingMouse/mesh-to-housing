@@ -8,7 +8,7 @@ function Panel.New(parent, api, settings, start, notify)
     local UI = MHT.UI
     self.frame = CreateFrame("Frame", nil, parent)
     self.frame:SetAllPoints(parent)
-    UI.Text(self.frame,
+    UI.Muted(self.frame,
         "Use a flat, placed copy at 100% size in your usual pivot-test pose. Forward/Back mean movement keys; answers show your keybinds. No rotation reset is used.",
         18, 180, 760)
     self.guide = UI.Text(self.frame, "", 18, 240, 760)
@@ -32,7 +32,7 @@ function Panel.New(parent, api, settings, start, notify)
         local saved, reason = self.controller:Save()
         if not saved and reason then notify(reason) end
     end)
-    self.hint = UI.Text(self.frame, "", 330, 515, 430)
+    self.hint = UI.Muted(self.frame, "", 330, 515, 430)
     self.controller = MHT.RotationCalibration.New(api, settings.measurements, function(message)
         self.message = message
         notify(message)

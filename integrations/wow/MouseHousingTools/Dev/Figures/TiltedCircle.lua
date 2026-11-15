@@ -18,7 +18,5 @@ function TiltedCircle.Build(scale, dimensions)
         items[#items + 1] = MHT.Plan.Placement(radius * c, radius * s, centerZ, rotation, scale,
             "Tilted tile " .. (i + 1) .. " / 5")
     end
-    local plan = MHT.Plan.New(items, { width, depth, height })
-    plan.fit = function(itemDimensions) return TiltedCircle.Build(scale, itemDimensions) end
-    return plan
+    return MHT.Plan.New(items, { width, depth, height })
 end
