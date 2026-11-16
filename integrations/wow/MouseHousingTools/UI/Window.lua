@@ -234,7 +234,7 @@ function Window:Refresh()
     self.plan = plan
     self.preview:SetPlan(plan, self.settingsPanel:Section().points, self:PreviewView())
     self:UpdateProgress(true)
-    self:SetStatus(plan and self:StartHint(#plan.items) or reason or "")
+    self:SetStatus(plan and self:StartHint(plan) or reason or "")
     self:UpdateControls()
 end
 
@@ -249,11 +249,13 @@ function Window:PreviewView()
     return shape
 end
 
-function Window:StartHint(count)
+function Window:StartHint(plan)
+    local item = plan.requires and "the " .. MHT.ItemProfiles.Name(plan.requires) or "the item"
     if self.useExistingPile then
-        return string.format("Stack %d copies of the item in one spot, then press Build and click them one at a time.", count)
+        return string.format("Stack %d copies of %s in one spot, then press Build and click them one at a time.",
+            #plan.items, item)
     end
-    return "Press Prepare items, then hover the item to copy and hold the cursor still."
+    return string.format("Press Prepare items, then hover %s to copy and hold the cursor still.", item)
 end
 
 function Window:UseExistingPile(checked)
@@ -374,6 +376,9 @@ end
 function Window:OnEvent(event, ...)
     self.developer:OnEvent(event, ...)
     self.placement:OnEvent(event, ...)
+    if (event == "HOUSE_EDITOR_MODE_CHANGED" or event == "HOUSING_DECOR_PLACE_SUCCESS") and not self:Locked() then
+        self.settingsPanel:Refresh()
+    end
 end
 
 function Window:Toggle()

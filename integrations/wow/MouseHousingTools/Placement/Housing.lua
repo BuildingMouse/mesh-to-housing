@@ -53,6 +53,25 @@ local function entryID(decorID)
     return { entryType = Enum.HousingCatalogEntryType.Decor, recordID = decorID }
 end
 
+-- The budget one copy uses
+function API:PlacementCost(decorID)
+    if not self:Available() then return nil end
+    local entry = C_HousingCatalog.GetCatalogEntryInfo(entryID(decorID))
+    return entry and entry.placementCost
+end
+
+-- Copies in storage before the source is picked.
+function API:StoredCount(decorID, color)
+    if not self:Available() then return nil end
+    local entry, stored = self:Stored({ decorID = decorID })
+    if not entry then return nil end
+    local count = 0
+    for _, variant in ipairs(stored) do
+        if color ~= "none" or API.DyeKey(variant.dyeSlots) == "" then count = count + variant.numStored end
+    end
+    return count
+end
+
 -- The budget the current house has left.
 function API:BudgetLeft()
     if not self:Active() then return nil end
