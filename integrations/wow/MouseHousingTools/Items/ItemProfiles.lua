@@ -19,6 +19,10 @@ function ItemProfiles.Logged(decorID)
     return MHT.ItemCatalog[decorID] or {}
 end
 
+function ItemProfiles.Name(decorID)
+    return ItemProfiles.Logged(decorID).name or ("Decor item " .. decorID)
+end
+
 local function point(value)
     if value and finite(value.x) and finite(value.y) and finite(value.z) then
         return { x = value.x, y = value.y, z = value.z }

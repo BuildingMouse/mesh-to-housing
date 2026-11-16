@@ -7,11 +7,24 @@ MHT.ModelPicker = ModelPicker
 
 local Library = MHT.ModelLibrary
 local IMPORT_LATER = "Import codes are coming later. Choose Library to use a saved model."
+local IMPORT_BOTTOM = 182
+local CARD, CARD_GAP = 94, 10
+local LIST_HEIGHT = 2 * (CARD + CARD_GAP) + 42
+
+local function selectionFor(window, library)
+    local selection = window.modelSettings[library] or {}
+    window.modelSettings[library] = selection
+    if not Library.Get(library, selection.id) then selection.id = Library.Entries(library)[1].id end
+    if selection.source ~= "import" then selection.source = "library" end
+    return selection
+end
 
 function ModelPicker.New(window, parent, width, options)
-    local self = setmetatable({ window = window, container = options.container, selection = window.modelSettings,
-        details = options.details, cards = {} }, ModelPicker)
+    local library = options.library
+    local self = setmetatable({ window = window, container = options.container, library = library,
+        selection = selectionFor(window, library), details = options.details, cards = {} }, ModelPicker)
     local UI, track = MHT.UI, options.track
+    local entries = Library.Entries(library)
 
     UI.Heading(parent, "Model", 0, 0, width)
     if options.onReset then
@@ -22,22 +35,33 @@ function ModelPicker.New(window, parent, width, options)
 
     self.catalog = CreateFrame("Frame", nil, parent)
     self.catalog:SetAllPoints(parent)
-    for i, entry in ipairs(Library.Entries) do
-        local card = track(UI.Button(self.catalog, "", 0, 68 + (i - 1) * 104, width, function()
+    local listHeight = #entries * (CARD + CARD_GAP) - CARD_GAP
+    local scrolls = listHeight > LIST_HEIGHT
+    local cardWidth = scrolls and width - 16 or width
+    local list = CreateFrame("ScrollFrame", nil, self.catalog)
+    list:SetPoint("TOPLEFT", 0, -68)
+    list:SetSize(cardWidth, math.min(listHeight, LIST_HEIGHT))
+    local cards = CreateFrame("Frame", nil, list)
+    cards:SetSize(cardWidth, listHeight)
+    list:SetScrollChild(cards)
+    if scrolls then UI.Scrollbar(list, cards) end
+    for i, entry in ipairs(entries) do
+        local card = track(UI.Button(cards, "", 0, (i - 1) * (CARD + CARD_GAP), cardWidth, function()
             self.selection.id = entry.id
             window:Refresh()
-        end, nil, 94))
+        end, nil, CARD))
         card.label:Hide()
         local thumbnail = MHT.Preview.New(card, true)
         thumbnail.frame:SetPoint("TOPLEFT", 12, -12)
         thumbnail.frame:SetSize(68, 68)
-        thumbnail:SetPlan((Library.Build(entry.id, 1, (MHT.ItemProfiles.Dimensions(entry.decorID)))))
+        local plan = Library.Plan(library, entry.id)
+        thumbnail:SetPlan(plan)
         local name = UI.Text(card, entry.name, 94, self.details and 26 or 39, 190)
-        local detail = UI.Muted(card, string.format("%d points", entry.count), 94, 48, 190)
+        local detail = UI.Muted(card, plan and string.format("%d points", #plan.items) or "", 94, 48, 190)
         detail:SetShown(self.details == true)
         self.cards[#self.cards + 1] = { id = entry.id, button = card, name = name }
     end
-    self.bottom = 78 + #Library.Entries * 104
+    self.libraryBottom = 68 + math.min(listHeight, LIST_HEIGHT) + CARD_GAP
 
     self.importFields = CreateFrame("Frame", nil, parent)
     self.importFields:SetAllPoints(parent)
@@ -54,9 +78,18 @@ function ModelPicker.New(window, parent, width, options)
     return self
 end
 
-function ModelPicker:Entry()
-    if self.selection.source ~= "library" then return nil, IMPORT_LATER end
-    return Library.Get(self.selection.id)
+-- The chosen model at 100% size.
+function ModelPicker:Plan()
+    if self.selection.source == "import" then return nil, IMPORT_LATER end
+    return Library.Plan(self.library, self.selection.id)
+end
+
+function ModelPicker:PlaceBelow(frame)
+    local top = self.selection.source == "import" and IMPORT_BOTTOM or self.libraryBottom
+    frame:ClearAllPoints()
+    frame:SetPoint("TOPLEFT", 0, -top)
+    frame:SetPoint("BOTTOMRIGHT")
+    return top
 end
 
 function ModelPicker:SetSource(source)
@@ -66,7 +99,7 @@ function ModelPicker:SetSource(source)
 end
 
 function ModelPicker:Reset()
-    self.selection.id, self.selection.source = Library.Entries[1].id, "library"
+    self.selection.id, self.selection.source = Library.Entries(self.library)[1].id, "library"
 end
 
 function ModelPicker:Refresh()

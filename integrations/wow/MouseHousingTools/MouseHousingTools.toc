@@ -12,11 +12,12 @@ Geometry\HiddenLines.lua
 Shapes\Layout.lua
 Shapes\Stairs.lua
 Shapes\Circle.lua
-Shapes\Rhombicosidodecahedron.lua
-Shapes\ModelLibrary.lua
 Items\ItemProfiles.lua
 Items\RotationAxes.lua
 Items\ItemCatalog.lua
+ModelLibrary\CopyString.lua
+ModelLibrary\ModelCatalog.lua
+ModelLibrary\ModelLibrary.lua
 Placement\Housing.lua
 Placement\Maneuver.lua
 Placement\Motion.lua
@@ -25,6 +26,7 @@ Placement\Preparation.lua
 Placement\Assembly.lua
 Dev\Figures\Cube.lua
 Dev\Figures\TiltedCircle.lua
+Dev\Figures\Rhombicosidodecahedron.lua
 Dev\Housing.lua
 Dev\Motion.lua
 Dev\Maneuver.lua

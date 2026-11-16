@@ -22,8 +22,6 @@ function Window.New(settings, uiState)
     local models = uiState.models or {}
     uiState.models = models
     models.percent, models.itemPercent = models.percent or 100, models.itemPercent or 100
-    if not MHT.ModelLibrary.Get(models.id) then models.id = MHT.ModelLibrary.Entries[1].id end
-    if models.source ~= "import" then models.source = "library" end
 
     local self = setmetatable({ settings = settings, uiState = uiState, modelSettings = uiState.models,
         mode = "shapes" }, Window)

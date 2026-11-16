@@ -15,34 +15,31 @@ function SculptPanel.New(window, container, parent)
 
     self.frame = CreateFrame("Frame", nil, parent)
     self.frame:SetAllPoints(parent)
-    self.picker = MHT.ModelPicker.New(window, self.frame, width, { track = track, container = container })
+    self.picker = MHT.ModelPicker.New(window, self.frame, width, { track = track, container = container, library = "sculpt" })
 
-    local y = self.picker.bottom
     self.options = CreateFrame("Frame", nil, self.frame)
-    self.options:SetAllPoints(self.frame)
-    UI.Rule(self.options, y + 2, width)
-    UI.Heading(self.options, "Item", 0, y + 16, width)
-    self.item = UI.Text(self.options, "", 0, y + 44, width)
-    self.count = UI.Muted(self.options, "", 0, y + 68, width)
-    self.height = y + 100
+    self.picker:PlaceBelow(self.options)
+    UI.Rule(self.options, 2, width)
+    UI.Heading(self.options, "Item", 0, 16, width)
+    self.item = UI.Text(self.options, "", 0, 44, width)
+    self.count = UI.Muted(self.options, "", 0, 68, width)
+    self.height = 100
     return self
 end
 
 function SculptPanel:Plan()
-    local entry, reason = self.picker:Entry()
-    if not entry then return nil, reason end
-    return MHT.ModelLibrary.Build(entry.id, 1, (MHT.ItemProfiles.Dimensions(entry.decorID)))
+    return self.picker:Plan()
 end
 
 function SculptPanel:Refresh()
     self.picker:Refresh()
-    local entry = self.picker:Entry()
-    self.options:SetShown(entry ~= nil)
-    if entry then
-        self.item:SetText(MHT.ItemProfiles.Logged(entry.decorID).name or ("Decor item " .. entry.decorID))
-        self.count:SetText(string.format("%d copies", entry.count))
+    local plan = self.picker:Plan()
+    self.options:SetShown(plan ~= nil)
+    if plan then
+        self.item:SetText(MHT.ItemProfiles.Name(plan.requires))
+        self.count:SetText(string.format("%d copies", #plan.items))
     end
-    self.container:SetContentHeight(self.height)
+    self.container:SetContentHeight(self.picker:PlaceBelow(self.options) + self.height)
 end
 
 function SculptPanel:UpdateControls()
