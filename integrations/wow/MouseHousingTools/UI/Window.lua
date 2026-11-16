@@ -376,7 +376,9 @@ end
 function Window:OnEvent(event, ...)
     self.developer:OnEvent(event, ...)
     self.placement:OnEvent(event, ...)
-    if (event == "HOUSE_EDITOR_MODE_CHANGED" or event == "HOUSING_DECOR_PLACE_SUCCESS") and not self:Locked() then
+    if (event == "HOUSE_EDITOR_MODE_CHANGED" or event == "HOUSING_DECOR_PLACE_SUCCESS"
+        or event == "HOUSING_STORAGE_UPDATED" or event == "HOUSING_NUM_DECOR_PLACED_CHANGED")
+        and not self:Locked() then
         self.settingsPanel:Refresh()
     end
 end
