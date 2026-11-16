@@ -22,6 +22,15 @@ local function copiesPlaced(count)
     return string.format("%d %s placed.", count, count == 1 and "copy was" or "copies were")
 end
 
+function Placement.Color(plan)
+    local color
+    for _, item in ipairs(plan.items) do
+        if color and (item.color or "same") ~= color then return nil end
+        color = item.color or "same"
+    end
+    return color or "same"
+end
+
 local function endMessage(placement)
     if placement.stage == "preparing" then return "Preparation stopped." end
     return string.format("Build ended. %d of %d items placed.", placement:CountItems("saved"), #placement.items)
@@ -89,8 +98,13 @@ function Placement:Start(plan, stage)
     if not MHT.Plan.SingleItem(plan) then
         return nil, "This plan uses more than one item; building supports one item for now."
     end
+    local color = Placement.Color(plan)
+    if not color then
+        return nil, "This plan mixes colors; building supports one color setting for all items for now."
+    end
 
     self.plan = plan
+    self.color = color
     self.stage = stage
     self.fromPile = stage == "building"
     self:ResetItems(#plan.items)

@@ -54,7 +54,7 @@ function Placement:UpdateArming(elapsed)
     if self.still < SOURCE_HOLD then return end
 
     local ok, reason = self:UseSource(hovered)
-    if ok then ok, reason = self.api:CheckStock(hovered, #self.plan.items) end
+    if ok then ok, reason = self.api:CheckStock(hovered, #self.plan.items, self.color) end
     if not ok then self:Abort(reason); return end
     self.api:UsePlacementSettings()
     self.cursor = { x = x, y = y }
@@ -95,7 +95,7 @@ function Placement:BeginCopy()
     self:SetState("copy", string.format("Creating copy %d / %d. Keep the cursor still...",
         self.copiesCreated + 1, #self.plan.items))
     -- Keep using the captured source when copies overlap it.
-    self.api:BeginCopy(self.source, #self.plan.items - self.copiesCreated)
+    self.api:BeginCopy(self.source, #self.plan.items - self.copiesCreated, self.color)
 end
 
 function Placement:IsNewCopy(item)

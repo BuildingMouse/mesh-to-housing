@@ -48,49 +48,73 @@ function API.DyeKey(slots)
     table.sort(values)
     return table.concat(values, ";")
 end
+
+local function entryID(decorID)
+    return { entryType = Enum.HousingCatalogEntryType.Decor, recordID = decorID }
+end
+
+-- The budget the current house has left.
+function API:BudgetLeft()
+    if not self:Active() then return nil end
+    local maximum, spent = C_HousingDecor.GetMaxPlacementBudget(), C_HousingDecor.GetSpentPlacementBudget()
+    if maximum and spent then return maximum - spent end
+end
+
 -- The source's decor entry and its variants in storage, in any color.
 function API:Stored(source)
-    local entryID = { entryType = Enum.HousingCatalogEntryType.Decor, recordID = source.decorID }
-    local entry = C_HousingCatalog.GetCatalogEntryInfo(entryID)
+    local id = entryID(source.decorID)
+    local entry = C_HousingCatalog.GetCatalogEntryInfo(id)
     if not entry then return nil, "Item information is not ready. Try again." end
     local variants = {}
-    for _, variant in ipairs(C_HousingCatalog.GetAllVariantInfosForEntry(entryID)) do
+    for _, variant in ipairs(C_HousingCatalog.GetAllVariantInfosForEntry(id)) do
         if variant.numStored > 0 then variants[#variants + 1] = variant end
     end
     return entry, variants
 end
 
--- Copies in storage that match the source's colors.
-function API:Stock(source)
+local SHORT_STOCK = {
+    same = "%d copies in the item's colors in storage; %d needed.",
+    none = "%d undyed copies in storage; %d needed.",
+    any = "%d copies in storage, in any color; %d needed.",
+}
+
+-- Copies in storage for a color setting: "same" as the source, "none" for undyed, or "any".
+-- "any" uses the source's colors first, then undyed copies, then the rest.
+function API:Stock(source, color)
     local entry, stored = self:Stored(source)
     if not entry then return nil, stored end
+    color = color or "same"
     local signature = API.DyeKey(source.dyeSlots)
     local stock = { count = 0, variants = {}, name = entry.name, cost = entry.placementCost }
-    for _, variant in ipairs(stored) do
-        if API.DyeKey(variant.dyeSlots) == signature then
-            stock.count = stock.count + variant.numStored
-            stock.variants[#stock.variants + 1] = variant.entryVariantID
+    for _, pass in ipairs({ "same", "none", "other" }) do
+        for _, variant in ipairs(stored) do
+            local key = API.DyeKey(variant.dyeSlots)
+            local group = key == signature and "same" or key == "" and "none" or "other"
+            local wanted = color == "any" or color == "same" and key == signature or color == "none" and key == ""
+            if group == pass and wanted then
+                stock.count = stock.count + variant.numStored
+                stock.variants[#stock.variants + 1] = variant.entryVariantID
+            end
         end
     end
     return stock
 end
 
-function API:CheckStock(source, count)
-    local stock, reason = self:Stock(source)
+function API:CheckStock(source, count, color)
+    local stock, reason = self:Stock(source, color)
     if not stock then return nil, reason end
     if stock.count < count then
-        return nil, string.format("%d matching copies in storage; %d needed.", stock.count, count)
+        return nil, string.format(SHORT_STOCK[color or "same"], stock.count, count)
     end
-    local maximum = C_HousingDecor.GetMaxPlacementBudget()
-    local spent = C_HousingDecor.GetSpentPlacementBudget()
-    if maximum and spent and spent + stock.cost * count > maximum then
+    local left = self:BudgetLeft()
+    if left and stock.cost * count > left then
         return nil, "Not enough housing placement budget for this shape."
     end
     return stock
 end
 
-function API:BeginCopy(source, remaining)
-    local stock, reason = self:CheckStock(source, remaining)
+function API:BeginCopy(source, remaining, color)
+    local stock, reason = self:CheckStock(source, remaining, color)
     if not stock then error(reason) end
     C_HousingBasicMode.StartPlacingNewDecor(stock.variants[1])
 end
