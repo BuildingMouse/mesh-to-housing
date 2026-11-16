@@ -23,7 +23,8 @@ function SculptPanel.New(window, container, parent)
     UI.Heading(self.options, "Item", 0, 16, width)
     self.item = UI.Text(self.options, "", 0, 44, width)
     self.count = UI.Muted(self.options, "", 0, 68, width)
-    self.height = 100
+    self.replaced = UI.Muted(self.options, "", 0, 92, width)
+    self.height = 124
     return self
 end
 
@@ -38,6 +39,9 @@ function SculptPanel:Refresh()
     if plan then
         self.item:SetText(MHT.ItemProfiles.Name(plan.requires))
         self.count:SetText(string.format("%d copies", #plan.items))
+        local replaced = self.picker:ReplacedItem(plan)
+        self.replaced:SetText(replaced
+            and string.format("The code asks for item %d, which has no logged size yet.", replaced) or "")
     end
     self.container:SetContentHeight(self.picker:PlaceBelow(self.options) + self.height)
 end

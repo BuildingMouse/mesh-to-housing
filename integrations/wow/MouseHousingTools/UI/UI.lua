@@ -208,6 +208,22 @@ end
 
 -- Text inputs
 
+local function paintInput(edit, background)
+    local function paint()
+        local enabled = edit:IsEnabled() ~= false
+        local focused = enabled and edit:HasFocus()
+        Theme.Skin(background, not enabled and "inputDisabled" or focused and "inputFocus" or "input")
+        edit:SetAlpha(enabled and 1 or 0.45)
+        if edit.label then edit.label:SetAlpha(enabled and 1 or 0.45) end
+        edit:SetTextColor(unpack(focused and Colors.text or Colors.muted))
+    end
+    local setEnabled = edit.SetEnabled
+    function edit:SetEnabled(enabled) setEnabled(self, enabled); paint() end
+    edit:HookScript("OnEditFocusGained", paint)
+    edit:HookScript("OnEditFocusLost", paint)
+    paint()
+end
+
 function UI.StyleInput(edit, width, height)
     height = height or 26
     if edit.background then
@@ -225,19 +241,37 @@ function UI.StyleInput(edit, width, height)
     edit:SetTextInsets(7, 7, 0, 0)
     Theme.Font(edit, "value")
     edit.background = background
-    local function paint()
-        local enabled = edit:IsEnabled() ~= false
-        local focused = enabled and edit:HasFocus()
-        Theme.Skin(background, not enabled and "inputDisabled" or focused and "inputFocus" or "input")
-        edit:SetAlpha(enabled and 1 or 0.45)
-        if edit.label then edit.label:SetAlpha(enabled and 1 or 0.45) end
-        edit:SetTextColor(unpack(focused and Colors.text or Colors.muted))
-    end
-    local setEnabled = edit.SetEnabled
-    function edit:SetEnabled(enabled) setEnabled(self, enabled); paint() end
-    edit:HookScript("OnEditFocusGained", paint)
-    edit:HookScript("OnEditFocusLost", paint)
-    paint()
+    paintInput(edit, background)
+end
+
+-- Scroll long text inside the box.
+function UI.TextArea(parent, x, y, width, height)
+    local box = UI.Surface(parent, width, height, "input")
+    box:SetPoint("TOPLEFT", x, -y)
+    local scroll = CreateFrame("ScrollFrame", nil, box)
+    scroll:SetPoint("TOPLEFT", 8, -8)
+    scroll:SetPoint("BOTTOMRIGHT", -20, 8)
+    local edit = CreateFrame("EditBox", nil, scroll)
+    edit:SetMultiLine(true)
+    edit:SetAutoFocus(false)
+    edit:SetSize(width - 28, height - 16)
+    Theme.Font(edit, "value")
+    scroll:SetScrollChild(edit)
+    UI.Scrollbar(scroll, edit)
+    edit.box = box
+    scroll:EnableMouse(true)
+    scroll:SetScript("OnMouseDown", function() if edit:IsEnabled() then edit:SetFocus() end end)
+    edit:SetScript("OnEscapePressed", function() edit:ClearFocus() end)
+    edit:SetScript("OnCursorChanged", function(_, _, cursorY, _, cursorHeight)
+        local top, offset, view = -cursorY, scroll:GetVerticalScroll(), scroll:GetHeight()
+        if top < offset then
+            scroll:SetVerticalScroll(top)
+        elseif top + cursorHeight > offset + view then
+            scroll:SetVerticalScroll(top + cursorHeight - view)
+        end
+    end)
+    paintInput(edit, box)
+    return edit
 end
 
 -- A number field. `limits` = { min, max, integer = true } clamps typed values.

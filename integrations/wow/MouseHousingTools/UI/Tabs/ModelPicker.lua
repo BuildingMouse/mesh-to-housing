@@ -3,10 +3,9 @@ local ModelPicker = {}
 ModelPicker.__index = ModelPicker
 MHT.ModelPicker = ModelPicker
 
--- Choosing a model on the 3D tabs: a card per library model, or an import code
+-- Choosing a model on the 3D tabs: a card per library model, or a pasted copy string
 
-local Library = MHT.ModelLibrary
-local IMPORT_LATER = "Import codes are coming later. Choose Library to use a saved model."
+local Library, CopyString = MHT.ModelLibrary, MHT.CopyString
 local IMPORT_BOTTOM = 182
 local CARD, CARD_GAP = 94, 10
 local LIST_HEIGHT = 2 * (CARD + CARD_GAP) + 42
@@ -16,6 +15,7 @@ local function selectionFor(window, library)
     window.modelSettings[library] = selection
     if not Library.Get(library, selection.id) then selection.id = Library.Entries(library)[1].id end
     if selection.source ~= "import" then selection.source = "library" end
+    if type(selection.code) ~= "string" then selection.code = nil end
     return selection
 end
 
@@ -65,22 +65,43 @@ function ModelPicker.New(window, parent, width, options)
 
     self.importFields = CreateFrame("Frame", nil, parent)
     self.importFields:SetAllPoints(parent)
-    local code = CreateFrame("EditBox", nil, self.importFields, "InputBoxTemplate")
-    code:SetPoint("TOPLEFT", 0, -68)
-    code:SetAutoFocus(false)
-    code:SetMultiLine(true)
-    UI.StyleInput(code, width, 80)
-    code:SetTextInsets(8, 8, 8, 8)
-    code:SetJustifyV("TOP")
-    code:SetText("Paste import code here…")
-    code:Disable()
-    UI.Muted(self.importFields, IMPORT_LATER, 0, 164, width)
+    local code = track(UI.TextArea(self.importFields, 0, 68, width, 104))
+    code:SetText(self.selection.code or "")
+    local hint = UI.Muted(code.box, "mouse:…", 8, 8, width - 28)
+    local function showHint() hint:SetShown(code:GetText() == "" and not code:HasFocus()) end
+    -- Everything is selected on click
+    code:HookScript("OnEditFocusGained", function() code:HighlightText(); showHint() end)
+    code:HookScript("OnEditFocusLost", showHint)
+    code:SetScript("OnTextChanged", function(_, userInput)
+        showHint()
+        if not userInput then return end
+        self.selection.code = code:GetText()
+        window:Refresh()
+    end)
+    showHint()
+    self.code = code
+    -- Errors only show while the options below are hidden, so they can use that space.
+    self.importNote = UI.Muted(self.importFields, "", 0, IMPORT_BOTTOM, width)
     return self
+end
+
+-- Keep the result until the string changes to not parse on every refresh.
+function ModelPicker:Imported()
+    local code = self.selection.code
+    if self.importedCode ~= code or not self.imported then
+        local model, reason = CopyString.Read(code)
+        self.importedCode, self.imported = code, { model = model, reason = reason }
+    end
+    return self.imported.model, self.imported.reason
 end
 
 -- The chosen model at 100% size.
 function ModelPicker:Plan()
-    if self.selection.source == "import" then return nil, IMPORT_LATER end
+    if self.selection.source == "import" then
+        local model, reason = self:Imported()
+        if not model then return nil, reason end
+        return CopyString.Plan(model)
+    end
     return Library.Plan(self.library, self.selection.id)
 end
 
@@ -90,6 +111,17 @@ function ModelPicker:PlaceBelow(frame)
     frame:SetPoint("TOPLEFT", 0, -top)
     frame:SetPoint("BOTTOMRIGHT")
     return top
+end
+
+function ModelPicker:ImportNote()
+    local plan, reason = self:Plan()
+    return plan and "" or reason
+end
+
+function ModelPicker:ReplacedItem(plan)
+    if self.selection.source ~= "import" then return nil end
+    local model = self:Imported()
+    if model and model.item ~= plan.requires then return model.item end
 end
 
 function ModelPicker:SetSource(source)
@@ -106,6 +138,8 @@ function ModelPicker:Refresh()
     local library = self.selection.source == "library"
     self.catalog:SetShown(library)
     self.importFields:SetShown(not library)
+    if library then return end
+    self.importNote:SetText(self:ImportNote())
 end
 
 function ModelPicker:UpdateControls()
