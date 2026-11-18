@@ -21,3 +21,12 @@ class Item(ABC):
     @property
     def extents(self):
         return np.asarray(self.mesh.extents).copy()
+
+    @property
+    def bounds(self):
+        return np.array(self.mesh.bounds)
+
+    def contains(self, points):
+        if not self.mesh.is_watertight:
+            raise ValueError(f"Item {self.key!r} needs a watertight mesh for volume queries")
+        return self.mesh.contains(points)

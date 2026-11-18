@@ -25,3 +25,10 @@ class Cuboid(Item):
     @property
     def extents(self):
         return np.asarray(self.dimensions)
+
+    @property
+    def bounds(self):
+        return np.array([-self.extents / 2, self.extents / 2])
+
+    def contains(self, points):
+        return np.all(np.abs(points) <= self.extents / 2 * (1 + 1e-9), axis=1)
