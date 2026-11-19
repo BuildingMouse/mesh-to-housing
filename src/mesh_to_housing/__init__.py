@@ -13,7 +13,8 @@ from .items import Cuboid, Item, MeshItem, load_catalog
 from .losses import (
     CandidateScorer, CombinedLoss, CombinedLossConfig, ExcessSurfaceConfig, ExcessSurfaceLoss,
     Loss, LossConfig, LossSession, LossTerm,
-    OutsideVolumeConfig, OutsideVolumeLoss,
+    OutsideVolumeConfig, OutsideVolumeLoss, SurfaceFScoreConfig, SurfaceFScoreLoss, SurfacePrecisionConfig,
+    SurfacePrecisionLoss, SurfaceRecallConfig, SurfaceRecallLoss,
     UncoveredSurfaceConfig, UncoveredSurfaceLoss, UncoveredVolumeConfig, UncoveredVolumeLoss,
 )
 from .meshes.loading import MeshLoader
@@ -26,7 +27,9 @@ __all__ = [
     "FittingTask", "Item", "ItemKinds", "ItemSettings", "Loss", "LossConfig", "LossSession", "LossTerm", "MeshItem",
     "MeshLoader", "MeshProcessor", "Moves", "Nudges", "OutsideVolumeConfig", "OutsideVolumeLoss", "Placement",
     "Polish", "ProposalSource", "RandomPool", "Refine", "Repeat", "Report", "ResidualProposals",
-    "ScoreAll", "SelectionConfig", "Shortlist", "SizeRange", "SparseResult", "Stage", "Step", "Swaps",
+    "ScoreAll", "SelectionConfig", "Shortlist", "SizeRange", "SparseResult", "Stage", "Step", "SurfaceFScoreConfig",
+    "SurfaceFScoreLoss", "SurfacePrecisionConfig", "SurfacePrecisionLoss", "SurfaceRecallConfig",
+    "SurfaceRecallLoss", "Swaps",
     "TransformConstraints", "UncoveredSurfaceConfig", "UncoveredSurfaceLoss", "UncoveredVolumeConfig",
     "UncoveredVolumeLoss", "VoxelGridConfig", "load_catalog", "prepare_mesh", "resize_mesh",
 ]
