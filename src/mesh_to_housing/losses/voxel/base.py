@@ -1,6 +1,8 @@
 from abc import abstractmethod
 from dataclasses import dataclass, field
 
+import numpy as np
+
 from ...geometry.config import VoxelGridConfig
 from ...geometry.volume import VoxelGrid
 from ..base import Loss, LossConfig, LossSession
@@ -9,6 +11,21 @@ from ..base import Loss, LossConfig, LossSession
 @dataclass(frozen=True)
 class VoxelLossConfig(LossConfig):
     grid: VoxelGridConfig = field(default_factory=VoxelGridConfig)
+
+
+@dataclass(frozen=True)
+class SurfaceToleranceConfig(VoxelLossConfig):
+    """The tolerance is in target units, so it keeps its meaning at any pitch."""
+
+    surface_tolerance: float = None
+
+    def __post_init__(self):
+        if self.surface_tolerance is not None and (
+                not np.isfinite(self.surface_tolerance) or self.surface_tolerance < 0):
+            raise ValueError("surface_tolerance must be finite and nonnegative")
+
+    def tolerance_for(self, mesh):
+        return float(mesh.extents.max() / 96 if self.surface_tolerance is None else self.surface_tolerance)
 
 
 class VoxelLoss(Loss):

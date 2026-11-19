@@ -4,23 +4,11 @@ from math import ceil
 import numpy as np
 
 from ...geometry.volume import occupied_cells
-from .base import CoverageSession, VoxelLoss, VoxelLossConfig
+from .base import CoverageSession, SurfaceToleranceConfig, VoxelLoss
 
 
 @dataclass(frozen=True)
-class UncoveredSurfaceConfig(VoxelLossConfig):
-    """The tolerance is in target units, so it keeps its meaning at any pitch."""
-
-    surface_tolerance: float = None
-
-    def __post_init__(self):
-        if self.surface_tolerance is not None and (
-                not np.isfinite(self.surface_tolerance) or self.surface_tolerance < 0):
-            raise ValueError("surface_tolerance must be finite and nonnegative")
-
-    def tolerance_for(self, mesh):
-        return float(mesh.extents.max() / 96 if self.surface_tolerance is None else self.surface_tolerance)
-
+class UncoveredSurfaceConfig(SurfaceToleranceConfig):
     def build(self):
         return UncoveredSurfaceLoss(self)
 

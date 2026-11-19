@@ -114,3 +114,23 @@ def _sample_solid(grid, placement):
     inside = _inside_item(grid.origin + indices * grid.pitch, placement)
     return frozenset(map(tuple, indices[inside].tolist()))
 
+
+
+def outer_surfaces(grid, construction):
+    """The target's surface and the construction's outer surface, as boolean masks on one shared frame."""
+    from scipy.ndimage import binary_erosion, binary_fill_holes
+
+    target_surface, target_low = grid.surface_mask
+    cells = np.array(list(set().union(*(occupied_cells(grid, placement) for placement in construction))),
+                     dtype=int).reshape(-1, 3)
+    bounds = np.vstack((target_low, target_low + target_surface.shape - 1, cells))
+    low = bounds.min(axis=0)
+    shape = bounds.max(axis=0) - low + 1
+
+    target = np.zeros(shape, dtype=bool)
+    start = target_low - low
+    target[tuple(slice(first, first + size) for first, size in zip(start, target_surface.shape))] = target_surface
+    solid = np.zeros(shape, dtype=bool)
+    solid[tuple((cells - low).T)] = True
+    solid = binary_fill_holes(solid)
+    return target, solid & ~binary_erosion(solid)
