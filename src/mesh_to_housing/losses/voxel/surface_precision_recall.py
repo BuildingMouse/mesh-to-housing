@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ...geometry.volume import VoxelGrid, outer_surfaces
+from ...geometry.volume import VoxelGrid, nearest_distances, outer_surfaces
 from ..base import Loss
 from .base import SurfaceToleranceConfig
 
@@ -64,10 +64,7 @@ class SurfaceFScoreLoss(SurfaceScoreLoss):
         return 0.0 if precision + recall == 0 else 2 * precision * recall / (precision + recall)
 
 
-def _share_within(cells, other, pitch, tolerance):
-    from scipy.ndimage import distance_transform_edt
-
-    if not cells.any() or not other.any():
+def _share_within(from_mask, to_mask, pitch, tolerance):
+    if not from_mask.any() or not to_mask.any():
         return 0.0
-    distances = distance_transform_edt(~other)[cells] * pitch
-    return float(np.mean(distances <= tolerance))
+    return float(np.mean(nearest_distances(from_mask, to_mask, pitch) <= tolerance))

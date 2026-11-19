@@ -7,7 +7,8 @@ from .fitting_task import FittingTask
 from .geometry.config import VoxelGridConfig
 from .items import Cuboid, Item, MeshItem, load_catalog
 from .losses import (
-    CombinedLoss, CombinedLossConfig, Loss, LossConfig, LossSession, LossTerm, OutsideVolumeConfig, OutsideVolumeLoss,
+    ChamferDistanceConfig, ChamferDistanceLoss, CombinedLoss, CombinedLossConfig, HausdorffDistanceConfig,
+    HausdorffDistanceLoss, Loss, LossConfig, LossSession, LossTerm, OutsideVolumeConfig, OutsideVolumeLoss,
     SurfaceFScoreConfig, SurfaceFScoreLoss, SurfacePrecisionConfig, SurfacePrecisionLoss, SurfaceRecallConfig,
     SurfaceRecallLoss, UncoveredSurfaceConfig, UncoveredSurfaceLoss, UncoveredVolumeConfig, UncoveredVolumeLoss,
 )
@@ -16,10 +17,11 @@ from .meshes.preparation import prepare_mesh, resize_mesh
 from .placement import Placement
 
 __all__ = [
-    "CombinedLoss", "CombinedLossConfig", "Construction", "Cuboid", "FittingAlgorithm", "FittingTask", "Item",
-    "Loss", "LossConfig", "LossSession", "LossTerm", "MeshItem", "MeshLoader", "MeshProcessor", "OutsideVolumeConfig",
-    "OutsideVolumeLoss", "Placement", "RandomPlacementGreedy", "SparseResult", "SurfaceFScoreConfig",
-    "SurfaceFScoreLoss", "SurfacePrecisionConfig", "SurfacePrecisionLoss", "SurfaceRecallConfig", "SurfaceRecallLoss",
+    "ChamferDistanceConfig", "ChamferDistanceLoss", "CombinedLoss", "CombinedLossConfig", "Construction", "Cuboid",
+    "FittingAlgorithm", "FittingTask", "HausdorffDistanceConfig", "HausdorffDistanceLoss", "Item", "Loss", "LossConfig",
+    "LossSession", "LossTerm", "MeshItem", "MeshLoader", "MeshProcessor", "OutsideVolumeConfig", "OutsideVolumeLoss",
+    "Placement", "RandomPlacementGreedy", "SparseResult", "SurfaceFScoreConfig", "SurfaceFScoreLoss",
+    "SurfacePrecisionConfig", "SurfacePrecisionLoss", "SurfaceRecallConfig", "SurfaceRecallLoss",
     "TransformConstraints", "UncoveredSurfaceConfig", "UncoveredSurfaceLoss", "UncoveredVolumeConfig",
     "UncoveredVolumeLoss", "VoxelGridConfig", "fit", "load_catalog", "prepare_mesh", "resize_mesh",
 ]

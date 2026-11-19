@@ -134,3 +134,12 @@ def outer_surfaces(grid, construction):
     solid[tuple((cells - low).T)] = True
     solid = binary_fill_holes(solid)
     return target, solid & ~binary_erosion(solid)
+
+
+def nearest_distances(from_mask, to_mask, pitch):
+    """The distance from each cell of from_mask to the nearest cell of to_mask, in target units."""
+    from scipy.ndimage import distance_transform_edt
+
+    # The transform measures how far each True cell is from the nearest False one, so to_mask is inverted.
+    distance_to_mask = distance_transform_edt(~to_mask)
+    return distance_to_mask[from_mask] * pitch
