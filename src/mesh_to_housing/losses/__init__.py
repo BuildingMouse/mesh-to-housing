@@ -1,8 +1,8 @@
-from .config import LossConfig, LossTerm
-from .construction_loss import ConstructionLoss
-from .volume import OutsideVolumeLoss, UncoveredVolumeLoss, evaluate_volume, outside_volume, uncovered_volume
+from .base import FullEvaluationSession, Loss, LossConfig, LossSession
+from .combined import CombinedLoss, CombinedLossConfig, LossTerm
+from .voxel import OutsideVolumeConfig, OutsideVolumeLoss, UncoveredVolumeConfig, UncoveredVolumeLoss
 
 __all__ = [
-    "ConstructionLoss", "LossConfig", "LossTerm", "OutsideVolumeLoss", "UncoveredVolumeLoss",
-    "evaluate_volume", "uncovered_volume", "outside_volume",
+    "CombinedLoss", "CombinedLossConfig", "FullEvaluationSession", "Loss", "LossConfig", "LossSession", "LossTerm",
+    "OutsideVolumeConfig", "OutsideVolumeLoss", "UncoveredVolumeConfig", "UncoveredVolumeLoss",
 ]

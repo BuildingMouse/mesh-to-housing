@@ -4,18 +4,20 @@ from .construction import Construction
 from .constraints import TransformConstraints
 from .fit import fit
 from .fitting_task import FittingTask
-from .geometry.config import GeometryConfig
+from .geometry.config import VoxelGridConfig
 from .items import Cuboid, Item, MeshItem, load_catalog
-from .losses import ConstructionLoss, LossConfig, LossTerm, OutsideVolumeLoss, UncoveredVolumeLoss
-from .losses import outside_volume, uncovered_volume
+from .losses import (
+    CombinedLoss, CombinedLossConfig, Loss, LossConfig, LossSession, LossTerm, OutsideVolumeConfig, OutsideVolumeLoss,
+    UncoveredVolumeConfig, UncoveredVolumeLoss,
+)
 from .meshes.loading import MeshLoader
 from .meshes.preparation import prepare_mesh, resize_mesh
 from .placement import Placement
 
 __all__ = [
-    "Construction", "ConstructionLoss", "Cuboid", "FittingAlgorithm", "FittingTask", "GeometryConfig",
-    "Item", "MeshItem", "MeshLoader", "MeshProcessor", "Placement", "RandomPlacementGreedy",
-    "LossConfig", "LossTerm", "OutsideVolumeLoss", "SparseResult", "TransformConstraints",
-    "UncoveredVolumeLoss", "fit",
-    "load_catalog", "outside_volume", "prepare_mesh", "resize_mesh", "uncovered_volume",
+    "CombinedLoss", "CombinedLossConfig", "Construction", "Cuboid", "FittingAlgorithm", "FittingTask", "Item",
+    "Loss", "LossConfig", "LossSession", "LossTerm", "MeshItem", "MeshLoader", "MeshProcessor", "OutsideVolumeConfig",
+    "OutsideVolumeLoss", "Placement", "RandomPlacementGreedy", "SparseResult", "TransformConstraints",
+    "UncoveredVolumeConfig", "UncoveredVolumeLoss", "VoxelGridConfig", "fit", "load_catalog", "prepare_mesh",
+    "resize_mesh",
 ]
