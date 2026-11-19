@@ -8,7 +8,7 @@ from .geometry.config import VoxelGridConfig
 from .items import Cuboid, Item, MeshItem, load_catalog
 from .losses import (
     CombinedLoss, CombinedLossConfig, Loss, LossConfig, LossSession, LossTerm, OutsideVolumeConfig, OutsideVolumeLoss,
-    UncoveredVolumeConfig, UncoveredVolumeLoss,
+    UncoveredSurfaceConfig, UncoveredSurfaceLoss, UncoveredVolumeConfig, UncoveredVolumeLoss,
 )
 from .meshes.loading import MeshLoader
 from .meshes.preparation import prepare_mesh, resize_mesh
@@ -18,6 +18,6 @@ __all__ = [
     "CombinedLoss", "CombinedLossConfig", "Construction", "Cuboid", "FittingAlgorithm", "FittingTask", "Item",
     "Loss", "LossConfig", "LossSession", "LossTerm", "MeshItem", "MeshLoader", "MeshProcessor", "OutsideVolumeConfig",
     "OutsideVolumeLoss", "Placement", "RandomPlacementGreedy", "SparseResult", "TransformConstraints",
-    "UncoveredVolumeConfig", "UncoveredVolumeLoss", "VoxelGridConfig", "fit", "load_catalog", "prepare_mesh",
-    "resize_mesh",
+    "UncoveredSurfaceConfig", "UncoveredSurfaceLoss", "UncoveredVolumeConfig", "UncoveredVolumeLoss", "VoxelGridConfig",
+    "fit", "load_catalog", "prepare_mesh", "resize_mesh",
 ]
