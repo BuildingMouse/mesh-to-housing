@@ -1,19 +1,19 @@
 from abc import abstractmethod
 from dataclasses import dataclass, field
 
-from ...geometry.config import GeometryConfig
+from ...geometry.config import VoxelGridConfig
 from ...geometry.volume import VoxelGrid
 from ..base import Loss, LossConfig, LossSession
 
 
 @dataclass(frozen=True)
 class VoxelLossConfig(LossConfig):
-    grid: GeometryConfig = field(default_factory=GeometryConfig)
+    grid: VoxelGridConfig = field(default_factory=VoxelGridConfig)
 
 
 class VoxelLoss(Loss):
     def grid(self, target):
-        return VoxelGrid.from_mesh(target, pitch=self.config.grid.voxel_pitch, closing=self.config.grid.closing)
+        return VoxelGrid.from_mesh(target, self.config.grid)
 
     def __call__(self, target, construction):
         session = self.session(target)

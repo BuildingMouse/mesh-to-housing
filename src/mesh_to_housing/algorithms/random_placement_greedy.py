@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from ..construction import Construction
-from ..geometry.config import GeometryConfig
+from ..geometry.config import VoxelGridConfig
 from ..geometry.volume import VoxelGrid
 from ..placement import Placement
 from ..validation import positive_integer
@@ -17,7 +17,7 @@ _MIN_GAIN = 1e-12
 class RandomPlacementGreedy(FittingAlgorithm):
     """Sample a fixed pool, then keep adding its best placement until the budget is used or nothing lowers the loss."""
 
-    geometry: GeometryConfig = field(default_factory=GeometryConfig)
+    grid: VoxelGridConfig = field(default_factory=VoxelGridConfig)
     candidate_centers: int = 256
     scale_count: int = 5
     orientation_count: int = 8
@@ -27,9 +27,8 @@ class RandomPlacementGreedy(FittingAlgorithm):
             positive_integer(getattr(self, name), name)
 
     def fit(self, task, loss, *, rng):
-        grid = VoxelGrid.from_mesh(task.target, pitch=self.geometry.voxel_pitch, closing=self.geometry.closing)
         pool = list(_sampled_placements(
-            task, grid, rng=rng, candidate_centers=self.candidate_centers,
+            task, VoxelGrid.from_mesh(task.target, self.grid), rng=rng, candidate_centers=self.candidate_centers,
             scale_count=self.scale_count, orientation_count=self.orientation_count,
         ))
         session = loss.session(task.target)
