@@ -8,11 +8,17 @@ from ...base import Loss, implements
 from ..base import VoxelLossConfig
 
 
-class ChamferDistanceConfig(VoxelLossConfig):
+class SurfaceDistanceConfig(VoxelLossConfig):
+    """The direction measures from the construction "to_target", from the target "to_construction", or "both"."""
+
+    direction: Literal["both", "to_target", "to_construction"] = "both"
+
+
+class ChamferDistanceConfig(SurfaceDistanceConfig):
     type: Literal["chamfer_distance"] = "chamfer_distance"
 
 
-class HausdorffDistanceConfig(VoxelLossConfig):
+class HausdorffDistanceConfig(SurfaceDistanceConfig):
     type: Literal["hausdorff_distance"] = "hausdorff_distance"
 
 
@@ -27,26 +33,31 @@ class SurfaceDistanceLoss(Loss):
         if not construction_surface.any():
             # A finite value lets a greedy fit rank its first item. Infinity would make every first gain equal.
             return 1.0
-        size = float(target.extents.max())
-        return self.summary(nearest_distances(construction_surface, target_surface, grid.pitch) / size,
-                            nearest_distances(target_surface, construction_surface, grid.pitch) / size)
+        to_target = self.reduce(nearest_distances(construction_surface, target_surface, grid.pitch))
+        to_construction = self.reduce(nearest_distances(target_surface, construction_surface, grid.pitch))
+        value = {
+            "to_target": to_target,
+            "to_construction": to_construction,
+            "both": self.reduce([to_target, to_construction]),
+        }[self.config.direction]
+        return float(value / target.extents.max())
 
     @abstractmethod
-    def summary(self, to_target: np.ndarray, to_construction: np.ndarray) -> float:
+    def reduce(self, distances: np.ndarray) -> float:
         pass
 
 
 @implements(ChamferDistanceConfig)
 class ChamferDistanceLoss(SurfaceDistanceLoss):
-    """The mean distance from each surface to the other, averaged over both directions."""
+    """The mean distance from one surface to the other."""
 
-    def summary(self, to_target, to_construction):
-        return float((to_target.mean() + to_construction.mean()) / 2)
+    def reduce(self, distances):
+        return np.mean(distances)
 
 
 @implements(HausdorffDistanceConfig)
 class HausdorffDistanceLoss(SurfaceDistanceLoss):
-    """The largest distance from either surface to the other."""
+    """The largest distance from one surface to the other."""
 
-    def summary(self, to_target, to_construction):
-        return float(max(to_target.max(), to_construction.max()))
+    def reduce(self, distances):
+        return np.max(distances)
