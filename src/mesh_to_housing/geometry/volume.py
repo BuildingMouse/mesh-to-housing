@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from functools import lru_cache
+from functools import cached_property, lru_cache
 from math import ceil
 from weakref import WeakKeyDictionary
 
@@ -32,6 +32,22 @@ class VoxelGrid:
     @property
     def points(self):
         return self.origin + self.indices * self.pitch
+
+    @cached_property
+    def surface_mask(self):
+        """The surface cells as a boolean array, and the index of its first cell."""
+        from scipy.ndimage import binary_erosion
+
+        low = self.indices.min(axis=0)
+        solid = np.zeros(self.indices.max(axis=0) - low + 1, dtype=bool)
+        solid[tuple((self.indices - low).T)] = True
+        return solid & ~binary_erosion(solid), low
+
+    @cached_property
+    def surface_cells(self):
+        """Occupied cells with at least one face exposed to empty space."""
+        mask, low = self.surface_mask
+        return frozenset(map(tuple, (np.argwhere(mask) + low).tolist()))
 
 
 def _cell_blocks(fine, samples):
