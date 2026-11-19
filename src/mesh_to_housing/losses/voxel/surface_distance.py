@@ -1,26 +1,43 @@
 from abc import abstractmethod
 from dataclasses import dataclass
+from typing import Literal, get_args
+
+import numpy as np
 
 from ...geometry.volume import VoxelGrid, nearest_distances, outer_surfaces
 from ..base import Loss
 from .base import VoxelLossConfig
 
 
+Direction = Literal["both", "to_target", "to_construction"]
+
+
 @dataclass(frozen=True)
-class ChamferDistanceConfig(VoxelLossConfig):
+class SurfaceDistanceConfig(VoxelLossConfig):
+    """The direction measures from the construction "to_target", from the target "to_construction", or "both"."""
+
+    direction: Direction = "both"
+
+    def __post_init__(self):
+        if self.direction not in get_args(Direction):
+            raise ValueError(f"direction must be one of {', '.join(get_args(Direction))}")
+
+
+@dataclass(frozen=True)
+class ChamferDistanceConfig(SurfaceDistanceConfig):
     def build(self):
         return ChamferDistanceLoss(self)
 
 
 @dataclass(frozen=True)
-class HausdorffDistanceConfig(VoxelLossConfig):
+class HausdorffDistanceConfig(SurfaceDistanceConfig):
     def build(self):
         return HausdorffDistanceLoss(self)
 
 
 class SurfaceDistanceLoss(Loss):
     """A summary of the distances between the target surface and the construction's outer surface.
-    Distances are divided by the target's diam, so they keep their meaning at any target size.
+    Distances are divided by the target's longest side, so they keep their meaning at any target size.
     """
 
     def __call__(self, target, construction):
@@ -29,24 +46,29 @@ class SurfaceDistanceLoss(Loss):
         if not construction_surface.any():
             # A finite value lets a greedy fit rank its first item. Infinity would make every first gain equal.
             return 1.0
-        size = float(target.extents.max())
-        return self.summary(nearest_distances(construction_surface, target_surface, grid.pitch) / size,
-                            nearest_distances(target_surface, construction_surface, grid.pitch) / size)
+        to_target = self.reduce(nearest_distances(construction_surface, target_surface, grid.pitch))
+        to_construction = self.reduce(nearest_distances(target_surface, construction_surface, grid.pitch))
+        value = {
+            "to_target": to_target,
+            "to_construction": to_construction,
+            "both": self.reduce([to_target, to_construction]),
+        }[self.config.direction]
+        return float(value / target.extents.max())
 
     @abstractmethod
-    def summary(self, to_target, to_construction):
+    def reduce(self, distances):
         pass
 
 
 class ChamferDistanceLoss(SurfaceDistanceLoss):
-    """The mean distance from each surface to the other, averaged over both directions."""
+    """The mean distance from one surface to the other."""
 
-    def summary(self, to_target, to_construction):
-        return float((to_target.mean() + to_construction.mean()) / 2)
+    def reduce(self, distances):
+        return np.mean(distances)
 
 
 class HausdorffDistanceLoss(SurfaceDistanceLoss):
-    """The largest distance from either surface to the other."""
+    """The largest distance from one surface to the other."""
 
-    def summary(self, to_target, to_construction):
-        return float(max(to_target.max(), to_construction.max()))
+    def reduce(self, distances):
+        return np.max(distances)

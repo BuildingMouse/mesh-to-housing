@@ -117,7 +117,9 @@ def _sample_solid(grid, placement):
 
 
 def outer_surfaces(grid, construction):
-    """The target's surface and the construction's outer surface, as boolean masks on one shared frame."""
+    """The target's surface and the construction's outer surface, as boolean masks on one shared frame.
+    Empty space enclosed inside the construction counts as filled, so only surface that faces the outside is kept.
+    """
     from scipy.ndimage import binary_erosion, binary_fill_holes
 
     target_surface, target_low = grid.surface_mask
