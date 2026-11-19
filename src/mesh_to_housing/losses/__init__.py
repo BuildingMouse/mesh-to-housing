@@ -6,6 +6,7 @@ from .base import CandidateScorer, IncrementalLoss, Loss, LossConfig, LossSessio
 from .combined import CombinedLoss, CombinedLossConfig, LossTerm
 from .sessions import FullEvaluationSession
 from .voxel import (
+    ChamferDistanceConfig, ChamferDistanceLoss, HausdorffDistanceConfig, HausdorffDistanceLoss,
     ExcessSurfaceConfig, ExcessSurfaceLoss, OutsideVolumeConfig, OutsideVolumeLoss, SurfaceFScoreConfig,
     SurfaceFScoreLoss, SurfacePrecisionConfig, SurfacePrecisionLoss, SurfaceRecallConfig, SurfaceRecallLoss,
     UncoveredSurfaceConfig, UncoveredSurfaceLoss, UncoveredVolumeConfig,
@@ -14,8 +15,8 @@ from .voxel import (
 
 LossConfigs = Annotated[
     Union[
-        CombinedLossConfig, ExcessSurfaceConfig, OutsideVolumeConfig, SurfaceFScoreConfig, SurfacePrecisionConfig,
-        SurfaceRecallConfig, UncoveredSurfaceConfig, UncoveredVolumeConfig,
+        ChamferDistanceConfig, CombinedLossConfig, ExcessSurfaceConfig, HausdorffDistanceConfig, OutsideVolumeConfig,
+        SurfaceFScoreConfig, SurfacePrecisionConfig, SurfaceRecallConfig, UncoveredSurfaceConfig, UncoveredVolumeConfig,
     ],
     Field(discriminator="type"),
 ]
@@ -25,7 +26,8 @@ CombinedLossConfig.model_rebuild()
 __all__ = [
     "CandidateScorer", "CombinedLoss", "CombinedLossConfig", "FullEvaluationSession", "IncrementalLoss", "Loss",
     "LossConfig", "LossConfigs", "LossSession", "LossTerm",
-    "ExcessSurfaceConfig", "ExcessSurfaceLoss",
+    "ChamferDistanceConfig", "ChamferDistanceLoss", "ExcessSurfaceConfig", "ExcessSurfaceLoss",
+    "HausdorffDistanceConfig", "HausdorffDistanceLoss",
     "OutsideVolumeConfig", "OutsideVolumeLoss",
     "SurfaceFScoreConfig", "SurfaceFScoreLoss", "SurfacePrecisionConfig", "SurfacePrecisionLoss",
     "SurfaceRecallConfig", "SurfaceRecallLoss",

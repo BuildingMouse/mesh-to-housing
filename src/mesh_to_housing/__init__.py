@@ -11,7 +11,8 @@ from .task import FittingTask, TransformConstraints
 from .geometry.voxel_grid import VoxelGridConfig
 from .items import Cuboid, Item, MeshItem, load_catalog
 from .losses import (
-    CandidateScorer, CombinedLoss, CombinedLossConfig, ExcessSurfaceConfig, ExcessSurfaceLoss,
+    CandidateScorer, ChamferDistanceConfig, ChamferDistanceLoss, CombinedLoss, CombinedLossConfig, ExcessSurfaceConfig,
+    ExcessSurfaceLoss, HausdorffDistanceConfig, HausdorffDistanceLoss,
     Loss, LossConfig, LossSession, LossTerm,
     OutsideVolumeConfig, OutsideVolumeLoss, SurfaceFScoreConfig, SurfaceFScoreLoss, SurfacePrecisionConfig,
     SurfacePrecisionLoss, SurfaceRecallConfig, SurfaceRecallLoss,
@@ -22,9 +23,11 @@ from .meshes.preparation import prepare_mesh, resize_mesh
 from .placement import Placement
 
 __all__ = [
-    "CandidateScorer", "CandidateSettings", "CombinedLoss", "CombinedLossConfig", "Config", "ConfigError",
+    "CandidateScorer", "CandidateSettings", "ChamferDistanceConfig", "ChamferDistanceLoss", "CombinedLoss",
+    "CombinedLossConfig", "Config", "ConfigError",
     "Construction", "Cuboid", "ExcessSurfaceConfig", "ExcessSurfaceLoss", "Execution", "Fill", "FittingPipeline",
-    "FittingTask", "Item", "ItemKinds", "ItemSettings", "Loss", "LossConfig", "LossSession", "LossTerm", "MeshItem",
+    "FittingTask", "HausdorffDistanceConfig", "HausdorffDistanceLoss", "Item", "ItemKinds", "ItemSettings", "Loss",
+    "LossConfig", "LossSession", "LossTerm", "MeshItem",
     "MeshLoader", "MeshProcessor", "Moves", "Nudges", "OutsideVolumeConfig", "OutsideVolumeLoss", "Placement",
     "Polish", "ProposalSource", "RandomPool", "Refine", "Repeat", "Report", "ResidualProposals",
     "ScoreAll", "SelectionConfig", "Shortlist", "SizeRange", "SparseResult", "Stage", "Step", "SurfaceFScoreConfig",
