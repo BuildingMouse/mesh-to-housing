@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
-from ....geometry.coverage import excess_surface_cells
-from ...coverage import PenaltySession
+from ....geometry.cells import select_keys
+from ...cell_sessions import PenaltySession
 from ..base import SurfaceToleranceConfig, VoxelLoss
 
 
@@ -16,7 +16,8 @@ class ExcessSurfaceLoss(VoxelLoss):
         grid = self.grid(target)
         tolerance = self.config.tolerance_for(target)
 
-        def standing_off(placement):
-            return excess_surface_cells(grid, placement, tolerance)
+        def standing_off(placements):
+            return select_keys(grid.item_cells.skins_of_each(placements),
+                               lambda keys: grid.outside_distance(keys) > tolerance)
 
-        return PenaltySession(standing_off, reference_count=len(grid.surface))
+        return PenaltySession(standing_off, reference=len(grid.surface))

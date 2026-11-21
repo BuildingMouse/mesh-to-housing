@@ -6,7 +6,7 @@ from typing import Mapping
 
 import numpy as np
 
-from .base import Loss, LossConfig, LossSession
+from .base import CandidateScorer, Loss, LossConfig, LossSession
 
 
 @dataclass(frozen=True)
@@ -80,3 +80,17 @@ class _WeightedSession(LossSession):
     def remove(self, placement):
         for _, session in self._terms:
             session.remove(placement)
+
+    def scorer(self, placements):
+        return _WeightedScorer([(weight, session.scorer(placements)) for weight, session in self._terms])
+
+
+class _WeightedScorer(CandidateScorer):
+    def __init__(self, terms):
+        self._terms = terms
+
+    def gains(self):
+        total = 0
+        for weight, scorer in self._terms:
+            total = total + weight * scorer.gains()
+        return total

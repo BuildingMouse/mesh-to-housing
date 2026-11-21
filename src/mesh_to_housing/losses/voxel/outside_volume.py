@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from ...geometry.volume import occupied_cells
+from ...geometry.cells import select_keys
 from .base import PenaltySession, VoxelLoss, VoxelLossConfig
 
 
@@ -16,7 +16,7 @@ class OutsideVolumeLoss(VoxelLoss):
     def session(self, target):
         grid = self.grid(target)
 
-        def outside_cells(placement):
-            return occupied_cells(grid, placement) - grid.cells
+        def outside_cells(placements):
+            return select_keys(grid.item_cells.occupied_by_each(placements), lambda keys: ~grid.in_target(keys))
 
-        return PenaltySession(outside_cells, reference_count=len(grid.cells))
+        return PenaltySession(outside_cells, reference=len(grid.keys))
