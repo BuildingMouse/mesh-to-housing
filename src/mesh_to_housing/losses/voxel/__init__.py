@@ -1,9 +1,10 @@
-from .base import CoverageSession, PenaltySession, VoxelLoss, VoxelLossConfig
+from .base import CoverageSession, PenaltySession, SurfaceToleranceConfig, VoxelLoss, VoxelLossConfig
 from .outside_volume import OutsideVolumeConfig, OutsideVolumeLoss
-from .uncovered_surface import UncoveredSurfaceConfig, UncoveredSurfaceLoss
+from .surface import ExcessSurfaceConfig, ExcessSurfaceLoss, UncoveredSurfaceConfig, UncoveredSurfaceLoss
 from .uncovered_volume import UncoveredVolumeConfig, UncoveredVolumeLoss
 
 __all__ = [
-    "CoverageSession", "OutsideVolumeConfig", "OutsideVolumeLoss", "PenaltySession", "UncoveredSurfaceConfig",
+    "CoverageSession", "ExcessSurfaceConfig", "ExcessSurfaceLoss", "OutsideVolumeConfig", "OutsideVolumeLoss",
+    "PenaltySession", "SurfaceToleranceConfig", "UncoveredSurfaceConfig",
     "UncoveredSurfaceLoss", "UncoveredVolumeConfig", "UncoveredVolumeLoss", "VoxelLoss", "VoxelLossConfig",
 ]

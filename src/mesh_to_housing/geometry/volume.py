@@ -1,7 +1,6 @@
 from dataclasses import dataclass, field
 from functools import cached_property, lru_cache
 from math import ceil
-from weakref import WeakKeyDictionary
 
 import numpy as np
 
@@ -23,7 +22,6 @@ class VoxelGrid:
         self.origin = np.array(self.origin, dtype=float, copy=True)
         self.indices = np.array(self.indices, dtype=int, copy=True)
         self.cells = frozenset(map(tuple, self.indices.tolist()))
-        self._solids = WeakKeyDictionary()
 
     @classmethod
     def from_mesh(cls, mesh, config=None):
@@ -48,6 +46,28 @@ class VoxelGrid:
         """Occupied cells with at least one face exposed to empty space."""
         mask, low = self.surface_mask
         return frozenset(map(tuple, (np.argwhere(mask) + low).tolist()))
+
+    @cached_property
+    def surface(self):
+        from .surface import TargetSurface
+
+        return TargetSurface(self)
+
+    @cached_property
+    def item_cells(self):
+        from .item_cells import ItemCells
+
+        return ItemCells(self)
+
+    def outside_distance(self, cells):
+        cells = np.asarray(cells, dtype=int).reshape(-1, 3)
+        return self._target_tree.query(cells)[0] * self.pitch
+
+    @cached_property
+    def _target_tree(self):
+        from scipy.spatial import cKDTree
+
+        return cKDTree(self.indices)
 
 
 def _cell_blocks(fine, samples):
@@ -85,32 +105,4 @@ def _voxelize(mesh, config):
 
 def occupied_cells(grid, placement):
     """Cells whose centers lie inside the item, which measures its volume without bias at any pitch."""
-    cells = grid._solids.get(placement)
-    if cells is None:
-        cells = grid._solids[placement] = _sample_solid(grid, placement)
-    return cells
-
-
-def _world_bounds(placement):
-    corners = np.array(np.meshgrid(*placement.item.bounds.T, indexing="ij")).reshape(3, -1).T
-    corners = corners @ placement.rotation.T * placement.scale + placement.center
-    return corners.min(axis=0), corners.max(axis=0)
-
-
-def _inside_item(points, placement):
-    return placement.item.contains(((points - placement.center) @ placement.rotation) / placement.scale)
-
-
-def _sample_solid(grid, placement):
-    world_low, world_high = _world_bounds(placement)
-    low = np.ceil((world_low - grid.origin) / grid.pitch - 1e-9).astype(int)
-    high = np.floor((world_high - grid.origin) / grid.pitch + 1e-9).astype(int)
-    lengths = high - low + 1
-    if np.any(lengths <= 0):
-        return frozenset()
-    if np.prod(lengths.astype(float)) > grid.config.max_cells:
-        raise ValueError("Item grid is too large; increase voxel_pitch or max_cells")
-    indices = np.indices(tuple(lengths)).reshape(3, -1).T + low
-    inside = _inside_item(grid.origin + indices * grid.pitch, placement)
-    return frozenset(map(tuple, indices[inside].tolist()))
-
+    return grid.item_cells.occupied(placement)

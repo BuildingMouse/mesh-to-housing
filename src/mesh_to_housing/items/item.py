@@ -26,6 +26,10 @@ class Item(ABC):
     def bounds(self):
         return np.array(self.mesh.bounds)
 
+    @property
+    def box_center(self):
+        return self.bounds.mean(axis=0)
+
     def contains(self, points):
         if not self.mesh.is_watertight:
             raise ValueError(f"Item {self.key!r} needs a watertight mesh for volume queries")
