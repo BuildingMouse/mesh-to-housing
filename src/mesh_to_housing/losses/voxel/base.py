@@ -2,9 +2,9 @@ from dataclasses import dataclass, field
 
 from ...geometry.config import VoxelGridConfig
 from ...geometry.settings import SurfaceSettings
-from ...geometry.volume import VoxelGrid
+from ...geometry.voxel_grid import VoxelGrid
 from ..base import IncrementalLoss, LossConfig
-from ..coverage import CoverageSession, PenaltySession
+from ..cell_sessions import CoverageSession, PenaltySession
 
 
 @dataclass(frozen=True)

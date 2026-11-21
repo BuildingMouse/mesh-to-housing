@@ -1,35 +1,62 @@
+"""Growing sets of cell keys and finding their outer layer."""
 from math import ceil
+from typing import Sequence
 
 import numpy as np
 
-_FACES = ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1))
+from ..execution import map_chunks
+from .cells import CellBox, CellKeys, key_offsets
+
+_FACES = key_offsets(np.vstack((np.eye(3, dtype=int), -np.eye(3, dtype=int))))
 
 
-def skin_cells(cells):
-    enclosed = set(cells)
-    for dx, dy, dz in _FACES:
-        enclosed.intersection_update((x - dx, y - dy, z - dz) for x, y, z in cells)
-    return cells - enclosed
-
-
-def ball_mask(pitch, radius):
+def ball_mask(pitch: float, radius: float) -> np.ndarray:
+    """Which cells of a cube around a center cell have their centers within radius of it."""
     cells = ceil(radius / pitch)
     offsets = np.indices((2 * cells + 1,) * 3) - cells
     return np.linalg.norm(offsets, axis=0) * pitch <= radius
 
 
-def dilated_cells(cells, pitch, radius, max_cells):
-    from scipy.ndimage import binary_dilation
+def skin_keys(keys: CellKeys) -> CellKeys:
+    """The cells of a sorted set that touch a cell outside the set through a face."""
+    if not len(keys):
+        return keys
+    enclosed = np.ones(len(keys), dtype=bool)
+    for face in _FACES:
+        neighbors = keys + face
+        position = np.minimum(np.searchsorted(keys, neighbors), len(keys) - 1)
+        enclosed &= keys[position] == neighbors
+    return keys[~enclosed]
 
-    if not cells:
-        return frozenset()
-    indices = np.asarray(list(cells), dtype=int)
+
+def dilate_each(key_lists: Sequence[CellKeys], pitch: float, radius: float) -> list[CellKeys]:
+    """For each list, the sorted keys of every cell whose center lies within radius of one of its cells.
+
+    All lists are grown in one pass.
+    """
+    return map_chunks(_dilate_chunk, key_lists, pitch, radius)
+
+
+def _dilate_chunk(key_lists, pitch, radius):
+    reached, owners = _dilate_all(key_lists, pitch, radius)
+    return _split_by_list(reached, owners, len(key_lists))
+
+
+def _dilate_all(key_lists, pitch, radius):
+    """The grown keys of all lists in sorted order, and the index of the list each key belongs to."""
     reach = ceil(radius / pitch)
-    low = indices.min(axis=0) - reach
-    shape = indices.max(axis=0) + reach - low + 1
-    if np.prod(shape.astype(float)) > max_cells:
-        raise ValueError("Surface grid is too large; reduce surface_tolerance or increase voxel_pitch or max_cells")
-    mask = np.zeros(shape, dtype=bool)
-    mask[tuple((indices - low).T)] = True
-    reached = np.argwhere(binary_dilation(mask, ball_mask(pitch, radius))) + low
-    return frozenset(map(tuple, reached.tolist()))
+    offsets = np.argwhere(ball_mask(pitch, radius)) - reach
+    counts = [len(keys) for keys in key_lists]
+    if not sum(counts):
+        return np.zeros(0, dtype=np.int64), np.zeros(0, dtype=np.int64)
+    keys = np.concatenate(key_lists)
+    around = CellBox.around(keys)
+    box = CellBox(around.low - reach, around.low + around.shape - 1 + reach)
+    steps = (offsets[:, 0] * box.shape[1] + offsets[:, 1]) * box.shape[2] + offsets[:, 2]
+    owners = np.repeat(np.arange(len(key_lists), dtype=np.int64), counts)
+    numbered = np.unique((steps[:, None] + (owners * box.size + box.numbers(keys))[None, :]).ravel())
+    return box.keys(numbered % box.size), numbered // box.size
+
+
+def _split_by_list(values, owners, count):
+    return np.split(values, np.searchsorted(owners, np.arange(1, count)))

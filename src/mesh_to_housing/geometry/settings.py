@@ -4,7 +4,7 @@ from typing import Optional
 import numpy as np
 
 from .config import VoxelGridConfig
-from .volume import VoxelGrid
+from .voxel_grid import VoxelGrid
 
 
 @dataclass(frozen=True)

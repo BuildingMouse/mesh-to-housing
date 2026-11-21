@@ -3,7 +3,7 @@ from typing import Literal, get_args
 
 import numpy as np
 
-from ...geometry.coverage import uncovered_surface_cells
+from ...geometry.coverage import uncovered_surface_keys
 from ...geometry.rotations import random_rotations, rotation_about, rotation_onto
 from ...geometry.settings import SurfaceSettings
 from ...placement import Placement
@@ -30,9 +30,9 @@ class ResidualProposals(SurfaceSettings, Proposals):
 
     def propose(self, task, placements, rng):
         grid = self.voxel_grid(task.target)
-        uncovered = uncovered_surface_cells(grid, placements, self.tolerance_for(task.target),
-                                            skin_only=self.skin_only)
-        available = np.flatnonzero([tuple(cell) in uncovered for cell in grid.surface.cells])
+        uncovered = uncovered_surface_keys(grid, placements, self.tolerance_for(task.target),
+                                           skin_only=self.skin_only)
+        available = grid.surface.index_of(uncovered)
         if not len(available):
             return []
         spots = available[rng.choice(len(available), min(self.spots, len(available)), replace=False)]

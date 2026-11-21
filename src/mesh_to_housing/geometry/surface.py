@@ -2,34 +2,45 @@ from functools import cached_property
 
 import numpy as np
 
+from .cells import CellKeys, cell_indices, cell_keys
+
 
 class TargetSurface:
-    def __init__(self, grid):
+    def __init__(self, grid: "VoxelGrid"):
         self._grid = grid
 
     @cached_property
-    def cells(self):
-        mask, low = self._grid.surface_mask
-        return np.argwhere(mask) + low
+    def mask(self) -> np.ndarray:
+        """The surface cells as a boolean array over the grid's box."""
+        from scipy.ndimage import binary_erosion
 
-    def __len__(self):
-        return len(self.cells)
+        solid = self._grid.solid_mask
+        return solid & ~binary_erosion(solid)
 
     @cached_property
-    def normals(self):
-        from scipy.ndimage import gaussian_filter
+    def keys(self) -> CellKeys:
+        return cell_keys(np.argwhere(self.mask) + self._grid.box.low)
 
+    @cached_property
+    def indices(self) -> np.ndarray:
+        return cell_indices(self.keys)
+
+    def __len__(self) -> int:
+        return len(self.keys)
+
+    def contains(self, keys: CellKeys) -> np.ndarray:
+        return self._grid.box.lookup(self.mask, keys)
+
+    def index_of(self, keys: CellKeys) -> np.ndarray:
+        """Where each of these surface cells sits in keys."""
+        return np.searchsorted(self.keys, keys)
+
+    @cached_property
+    def normals(self) -> np.ndarray:
+        return self._grid.outward_normals(self.indices)
+
+    @cached_property
+    def points(self) -> np.ndarray:
+        """Points on the surface itself, half a cell outward from the centers of the surface cells."""
         grid = self._grid
-        low = grid.indices.min(axis=0) - 2
-        solid = np.zeros(grid.indices.max(axis=0) - low + 3)
-        solid[tuple((grid.indices - low).T)] = 1.0
-        gradient = np.gradient(gaussian_filter(solid, sigma=1.0))
-        local = tuple((self.cells - low).T)
-        normals = -np.stack([component[local] for component in gradient], axis=1)
-        lengths = np.linalg.norm(normals, axis=1, keepdims=True)
-        return np.where(lengths > 0, normals / np.where(lengths > 0, lengths, 1), (0.0, 0.0, 1.0))
-
-    @cached_property
-    def points(self):
-        # Cell centers sit inside the target; anchors should touch its boundary.
-        return self._grid.origin + self.cells * self._grid.pitch + self.normals * self._grid.pitch / 2
+        return grid.origin + self.indices * grid.pitch + self.normals * grid.pitch / 2

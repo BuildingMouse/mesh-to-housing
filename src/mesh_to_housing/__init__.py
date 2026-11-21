@@ -2,6 +2,7 @@ from .pipeline.processor import MeshProcessor, SparseResult
 from .algorithms import RandomPlacementGreedy
 from .fitting import FittingAlgorithm, Greedy, Proposals, RandomPool, ResidualProposals, ScoreAll, Selection
 from .construction import Construction
+from .execution import Execution
 from .constraints import TransformConstraints
 from .fit import fit
 from .fitting_task import FittingTask
@@ -19,7 +20,7 @@ from .placement import Placement
 
 __all__ = [
     "CandidateScorer", "CombinedLoss", "CombinedLossConfig", "Construction", "Cuboid", "FittingAlgorithm",
-    "ExcessSurfaceConfig", "ExcessSurfaceLoss", "FittingTask", "Greedy", "Item",
+    "ExcessSurfaceConfig", "ExcessSurfaceLoss", "Execution", "FittingTask", "Greedy", "Item",
     "Loss", "LossConfig", "LossSession", "LossTerm", "MeshItem", "MeshLoader", "MeshProcessor", "OutsideVolumeConfig",
     "OutsideVolumeLoss", "Placement", "Proposals", "RandomPlacementGreedy", "RandomPool", "ResidualProposals",
     "ScoreAll", "Selection",
