@@ -6,6 +6,7 @@ import numpy as np
 from ..construction import Construction
 from ..fitting_task import FittingTask
 from ..placement import Placement
+from .proposals.base import Proposals
 from .selection import Candidates, Selector
 
 
@@ -16,11 +17,14 @@ class FitState:
     rng: np.random.Generator
     min_gain: float = 1e-12
     pool: Optional[Candidates] = None
+    renewed: tuple[Proposals, ...] = ()
+    renew_every: int = 10
     _placements: list[Placement] = field(default_factory=list, init=False, repr=False)
 
     @classmethod
-    def start(cls, task, selection, loss, rng, *, min_gain=1e-12):
-        return cls(task, selection.start(task.target, loss.session(task.target)), rng, min_gain=min_gain)
+    def start(cls, task, selection, loss, rng, *, min_gain=1e-12, renewed=(), renew_every=10):
+        return cls(task, selection.start(task.target, loss.session(task.target)), rng, min_gain=min_gain,
+                   renewed=renewed, renew_every=renew_every)
 
     @property
     def placements(self) -> tuple[Placement, ...]:
@@ -38,6 +42,9 @@ class FitState:
 
     def propose_pool(self, source) -> None:
         self.pool = self.candidates(source.propose(self.task, self.placements, self.rng))
+
+    def renew(self) -> list[Candidates]:
+        return [self.candidates(source.propose(self.task, self.placements, self.rng)) for source in self.renewed]
 
     def add(self, placement: Placement, position: Optional[int] = None) -> None:
         self.selector.add(placement)

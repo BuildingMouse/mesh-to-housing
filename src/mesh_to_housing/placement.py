@@ -12,6 +12,11 @@ class Placement:
     rotation: np.ndarray
     scale: float = 1.0
 
+    @classmethod
+    def with_point_at(cls, item, anchor, point, rotation, scale=1.0):
+        center = np.asarray(point) - np.asarray(anchor) @ np.asarray(rotation).T * scale
+        return cls(item, center, rotation, scale)
+
     def __post_init__(self):
         center = np.array(self.center, dtype=float, copy=True)
         rotation = np.array(self.rotation, dtype=float, copy=True)
