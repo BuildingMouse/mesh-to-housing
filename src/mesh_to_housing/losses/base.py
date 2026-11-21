@@ -1,68 +1,73 @@
 from abc import ABC, abstractmethod
-from math import isnan
+from typing import Sequence
+
+import numpy as np
+import trimesh
 
 from ..construction import Construction
+from ..placement import Placement
 
 
 class LossConfig(ABC):
     @abstractmethod
-    def build(self):
+    def build(self) -> "Loss":
         """Create the loss this config describes."""
 
 
 class Loss(ABC):
-    def __init__(self, config):
+    """How far a construction is from the target. Lower is better."""
+
+    def __init__(self, config: LossConfig):
         self.config = config
 
     @abstractmethod
-    def __call__(self, target, construction):
+    def __call__(self, target: trimesh.Trimesh, construction: Construction) -> float:
         pass
 
-    def session(self, target):
+    def session(self, target: trimesh.Trimesh) -> "LossSession":
+        from .sessions import FullEvaluationSession
+
         return FullEvaluationSession(self, target)
 
 
-class LossSession(ABC):
-    """Follows a construction as items are added, so a loss can update in small steps."""
+class IncrementalLoss(Loss):
+    def __call__(self, target, construction):
+        session = self.session(target)
+        for placement in construction:
+            session.add(placement)
+        return session.value()
 
     @abstractmethod
-    def value(self):
+    def session(self, target):
+        pass
+
+
+class LossSession(ABC):
+    """Mutable scoring state for one construction."""
+
+    @abstractmethod
+    def value(self) -> float:
         pass
 
     @abstractmethod
-    def gain(self, placement):
+    def gain(self, placement: Placement) -> float:
         """How much adding a placement would lower the loss."""
 
     @abstractmethod
-    def add(self, placement):
+    def add(self, placement: Placement) -> None:
         pass
 
+    @abstractmethod
+    def remove(self, placement: Placement) -> None:
+        pass
 
-class FullEvaluationSession(LossSession):
-    """Works with any loss by evaluating the whole construction each time."""
+    def scorer(self, placements: Sequence[Placement]) -> "CandidateScorer":
+        from .sessions import OneByOneScorer
 
-    def __init__(self, loss, target):
-        self._loss = loss
-        self._target = target
-        self._construction = Construction()
-        self._value = self._evaluate(self._construction)
+        return OneByOneScorer(self, placements)
 
-    def _evaluate(self, construction):
-        value = float(self._loss(self._target, construction))
-        if isnan(value):
-            raise ValueError("Loss returned NaN")
-        return value
 
-    def _with(self, placement):
-        return Construction((*self._construction.placements, placement))
-
-    def value(self):
-        return self._value
-
-    def gain(self, placement):
-        value = self._evaluate(self._with(placement))
-        return 0.0 if value == self._value else self._value - value
-
-    def add(self, placement):
-        self._construction = self._with(placement)
-        self._value = self._evaluate(self._construction)
+class CandidateScorer(ABC):
+    @abstractmethod
+    def gains(self) -> np.ndarray:
+        pass

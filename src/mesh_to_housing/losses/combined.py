@@ -76,3 +76,7 @@ class _WeightedSession(LossSession):
     def add(self, placement):
         for _, session in self._terms:
             session.add(placement)
+
+    def remove(self, placement):
+        for _, session in self._terms:
+            session.remove(placement)
