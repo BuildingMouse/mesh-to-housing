@@ -74,12 +74,25 @@ class FitState:
             self._selector = None if scope.loss is None else self._start_selector(scope)
             if self._selector is not None:
                 scope = replace(scope, pools=tuple(map(self._rescored, scope.pools)))
+        if scope.filters != self.scope.filters:
+            scope = replace(scope, pools=tuple(self._filtered(pool, scope.filters) for pool in scope.pools))
         self.scope = scope
 
     def _rescored(self, pool: CandidateGroup) -> CandidateGroup:
         rescored = self.selector.candidates(pool.placements)
         rescored.taken = pool.taken
+        rescored.allowed = pool.allowed
         return rescored
+
+    def _filtered(self, pool: CandidateGroup, filters: Sequence[CandidateFilter]) -> CandidateGroup:
+        placements = pool.placements
+        for candidate_filter in filters:
+            placements = candidate_filter.apply(self.task, placements)
+        allowed = set(placements)
+        filtered = CandidateGroup(pool.placements, pool.scorer)
+        filtered.taken = pool.taken
+        filtered.allowed = np.array([placement in allowed for placement in pool.placements], dtype=bool)
+        return filtered
 
     def _start_selector(self, scope: Scope) -> Selector:
         session = self._loss(scope.loss).session(self.task.target)

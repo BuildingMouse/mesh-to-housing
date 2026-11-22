@@ -2,8 +2,8 @@
 import pytest
 
 from mesh_to_housing import (
-    CandidateSettings, Fill, FittingPipeline, Loss, OutsideVolumeConfig, RandomPool, Repeat, ResidualProposals,
-    ScoreAll, Shortlist, Stage, UncoveredVolumeConfig,
+    CandidateSettings, Construction, Fill, FittingPipeline, Loss, OutsideVolumeConfig, RandomPool, Refine,
+    Repeat, ResidualProposals, ScoreAll, Shortlist, Stage, UncoveredVolumeConfig,
 )
 
 
@@ -93,6 +93,15 @@ def test_refit_continues_from_a_construction(task, losses, proposals):
     first = fill.fit(task, seed=1)
     second = fill.refit(task, first, seed=2)
     assert len(second) == 4 and second.placements[:2] == first.placements
+
+
+def test_shortlist_refines_without_proposal_sources(task, losses, proposals):
+    first = pipeline(losses, proposals, Stage(minimize="volume", candidates=POOL, steps=(Fill(items=1),))).fit(
+        task, seed=1,
+    )
+    refine = pipeline(losses, {}, Stage(minimize="volume", select=Shortlist(losses["volume"]), steps=(Refine(),)))
+    construction = refine.refit(task, Construction(first.placements * 2), seed=1)
+    assert construction.placements == first.placements
 
 
 @pytest.mark.parametrize("steps, message", [

@@ -17,6 +17,7 @@ class CandidateGroup:
         self.placements = tuple(placements)
         self.scorer = scorer
         self.taken = np.zeros(len(self.placements), dtype=bool)
+        self.allowed = np.ones(len(self.placements), dtype=bool)
 
     def __len__(self) -> int:
         return len(self.placements)
@@ -25,8 +26,12 @@ class CandidateGroup:
         self.taken[index] = True
         return self.placements[index]
 
+    @property
+    def available(self) -> np.ndarray:
+        return self.allowed & ~self.taken
+
     def available_gains(self) -> np.ndarray:
-        return np.where(self.taken, -np.inf, self.scorer.gains())
+        return np.where(self.available, self.scorer.gains(), -np.inf)
 
 
 class Selector(ABC):
@@ -131,7 +136,9 @@ class _ShortlistSelector(Selector):
 
     def best(self, groups, min_gain):
         """Walk down the ranking one shortlist at a time, and take the best of the first shortlist that helps."""
-        available = [np.flatnonzero(~group.taken) for group in groups]
+        if not groups:
+            return None
+        available = [np.flatnonzero(group.available) for group in groups]
         ranking = np.concatenate([group.scorer.gains()[indices] for group, indices in zip(groups, available)])
         if not len(ranking):
             return None
