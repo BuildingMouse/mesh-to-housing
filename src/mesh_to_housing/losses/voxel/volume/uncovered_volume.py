@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
-from ...geometry.cells import select_keys
-from .base import CoverageSession, VoxelLoss, VoxelLossConfig
+from ....geometry.cells import select_keys
+from ..base import CoverageSession, VoxelLoss, VoxelLossConfig
 
 
 @dataclass(frozen=True)

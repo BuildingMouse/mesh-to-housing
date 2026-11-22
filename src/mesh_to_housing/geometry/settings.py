@@ -3,8 +3,7 @@ from typing import Optional
 
 import numpy as np
 
-from .config import VoxelGridConfig
-from .voxel_grid import VoxelGrid
+from .voxel_grid import VoxelGrid, VoxelGridConfig
 
 
 @dataclass(frozen=True)

@@ -1,8 +1,7 @@
 from dataclasses import dataclass, field
 
-from ...geometry.config import VoxelGridConfig
 from ...geometry.settings import SurfaceSettings
-from ...geometry.voxel_grid import VoxelGrid
+from ...geometry.voxel_grid import VoxelGrid, VoxelGridConfig
 from ..base import IncrementalLoss, LossConfig
 from ..cell_sessions import CoverageSession, PenaltySession
 

@@ -1,10 +1,9 @@
 from dataclasses import dataclass, field
 
-from ...geometry.config import VoxelGridConfig
+from ...utils.values import positive_integer
 from ...geometry.rotations import sample_rotations
-from ...geometry.voxel_grid import VoxelGrid
+from ...geometry.voxel_grid import VoxelGrid, VoxelGridConfig
 from ...placement import Placement
-from ...validation import positive_integer
 from .base import Proposals
 
 

@@ -3,8 +3,8 @@ from abc import ABC, abstractmethod
 import numpy as np
 
 from ..construction import Construction
-from ..fitting_task import FittingTask
 from ..losses.base import Loss
+from ..task import FittingTask
 
 
 class FittingAlgorithm(ABC):

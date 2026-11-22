@@ -1,12 +1,10 @@
 from .pipeline.processor import MeshProcessor, SparseResult
-from .algorithms import RandomPlacementGreedy
 from .fitting import FittingAlgorithm, Greedy, Proposals, RandomPool, ResidualProposals, ScoreAll, Selection
 from .construction import Construction
-from .execution import Execution
-from .constraints import TransformConstraints
+from .utils.execution import Execution
 from .fit import fit
-from .fitting_task import FittingTask
-from .geometry.config import VoxelGridConfig
+from .task import FittingTask, TransformConstraints
+from .geometry.voxel_grid import VoxelGridConfig
 from .items import Cuboid, Item, MeshItem, load_catalog
 from .losses import (
     CandidateScorer, CombinedLoss, CombinedLossConfig, ExcessSurfaceConfig, ExcessSurfaceLoss,
@@ -22,7 +20,7 @@ __all__ = [
     "CandidateScorer", "CombinedLoss", "CombinedLossConfig", "Construction", "Cuboid", "FittingAlgorithm",
     "ExcessSurfaceConfig", "ExcessSurfaceLoss", "Execution", "FittingTask", "Greedy", "Item",
     "Loss", "LossConfig", "LossSession", "LossTerm", "MeshItem", "MeshLoader", "MeshProcessor", "OutsideVolumeConfig",
-    "OutsideVolumeLoss", "Placement", "Proposals", "RandomPlacementGreedy", "RandomPool", "ResidualProposals",
+    "OutsideVolumeLoss", "Placement", "Proposals", "RandomPool", "ResidualProposals",
     "ScoreAll", "Selection",
     "SparseResult", "TransformConstraints",
     "UncoveredSurfaceConfig", "UncoveredSurfaceLoss", "UncoveredVolumeConfig", "UncoveredVolumeLoss", "VoxelGridConfig",

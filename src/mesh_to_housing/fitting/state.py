@@ -4,8 +4,8 @@ from typing import Optional, Sequence
 import numpy as np
 
 from ..construction import Construction
-from ..fitting_task import FittingTask
 from ..placement import Placement
+from ..task import FittingTask
 from .proposals.base import Proposals
 from .selection import Candidates, Selector
 

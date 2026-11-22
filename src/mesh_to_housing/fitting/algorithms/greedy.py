@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from math import isfinite
 from typing import Optional
 
-from ...validation import positive_integer
+from ...utils.values import positive_integer
 from ..algorithm import FittingAlgorithm
 from ..proposals import Proposals, RandomPool
 from ..selection import ScoreAll, Selection

@@ -4,7 +4,7 @@ from weakref import WeakKeyDictionary
 
 import numpy as np
 
-from ..execution import map_chunks, share, worker_count
+from ..utils.execution import map_chunks, share, worker_count
 from ..placement import Placement
 from .cells import CellKeys, cell_keys
 from .morphology import skin_keys

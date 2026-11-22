@@ -3,7 +3,7 @@ from contextvars import ContextVar
 from math import ceil
 import multiprocessing
 
-from .validation import positive_integer
+from .values import positive_integer
 
 
 class Shared:

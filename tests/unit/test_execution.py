@@ -3,7 +3,7 @@ import multiprocessing
 import pytest
 
 from mesh_to_housing import Execution
-from mesh_to_housing.execution import map_chunks, share, worker_count
+from mesh_to_housing.utils.execution import map_chunks, share, worker_count
 
 pytestmark = pytest.mark.skipif("fork" not in multiprocessing.get_all_start_methods(), reason="workers need fork")
 

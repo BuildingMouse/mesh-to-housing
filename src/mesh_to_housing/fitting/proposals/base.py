@@ -3,8 +3,8 @@ from typing import Sequence
 
 import numpy as np
 
-from ...fitting_task import FittingTask
 from ...placement import Placement
+from ...task import FittingTask
 
 
 class Proposals(ABC):

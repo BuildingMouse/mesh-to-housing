@@ -3,11 +3,11 @@ from typing import Literal, get_args
 
 import numpy as np
 
+from ...utils.values import positive_integer
 from ...geometry.coverage import uncovered_surface_keys
 from ...geometry.rotations import random_rotations, rotation_about, rotation_onto
 from ...geometry.settings import SurfaceSettings
 from ...placement import Placement
-from ...validation import positive_integer
 from .base import Proposals
 
 Orientation = Literal["surface", "random"]
