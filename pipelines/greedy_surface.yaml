@@ -1,0 +1,18 @@
+losses:
+  surface:
+    type: combined
+    terms:
+      uncovered: {loss: {type: uncovered_surface, skin_only: true}, loss_scale: 4}
+      excess: {loss: {type: excess_surface}, loss_scale: 1}
+proposals:
+  pool: {type: random_pool}
+  residual: {type: residual}
+steps:
+  - stage: greedy
+    minimize: surface
+    candidates: {fixed: [pool], refreshed: [residual]}
+    steps:
+      - {type: fill}
+metrics:
+  uncovered: {type: uncovered_surface}
+  outside: {type: outside_volume}

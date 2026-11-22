@@ -1,4 +1,6 @@
 """Reading and writing pipelines as plain data and YAML."""
+from pathlib import Path
+
 import pytest
 
 from mesh_to_housing import (
@@ -63,6 +65,13 @@ def test_settings_at_their_defaults_are_left_out():
 def test_bad_configs_say_where_they_fail(text, message):
     with pytest.raises(ConfigError, match=message):
         FittingPipeline.from_yaml(text)
+
+
+@pytest.mark.parametrize("path", sorted((Path(__file__).resolve().parents[2] / "pipelines").glob("*.yaml")),
+                         ids=lambda path: path.name)
+def test_example_pipelines_load_and_read_back(path):
+    pipeline = FittingPipeline.load(path)
+    assert FittingPipeline.from_yaml(pipeline.to_yaml()) == pipeline
 
 
 def test_pipelines_describe_themselves_as_json_schema():
