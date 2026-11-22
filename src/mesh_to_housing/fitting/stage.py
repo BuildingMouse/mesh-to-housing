@@ -6,6 +6,7 @@ from pydantic import Discriminator, Tag, model_serializer, model_validator
 
 from ..utils.config import Config
 from ..utils.values import Fraction, PositiveInt
+from .filters import FilterConfigs
 from .selection import SelectionConfigs
 from .state import FitState, Scope
 from .steps import Fill, Polish, Refine, Step
@@ -19,6 +20,7 @@ class CandidateSettings(Config):
     fixed: Optional[tuple[str, ...]] = None
     refreshed: Optional[tuple[str, ...]] = None
     refresh_every: Optional[PositiveInt] = None
+    filters: Optional[tuple[FilterConfigs, ...]] = None
 
     def proposals_used(self) -> tuple[str, ...]:
         return (*(self.fixed or ()), *(self.refreshed or ()))
@@ -29,6 +31,7 @@ class CandidateSettings(Config):
             scope,
             refreshed=scope.refreshed if self.refreshed is None else tuple(map(state.proposals_named, self.refreshed)),
             refresh_every=scope.refresh_every if self.refresh_every is None else self.refresh_every,
+            filters=scope.filters if self.filters is None else self.filters,
         )
         return scope
 

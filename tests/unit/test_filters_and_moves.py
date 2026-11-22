@@ -1,12 +1,26 @@
 import numpy as np
 import trimesh
 
-from mesh_to_housing import Cuboid, FittingTask, Placement, Swaps
+from mesh_to_housing import (
+    CandidateSettings, Cuboid, Fill, FittingPipeline, FittingTask, ItemKinds, Placement, RandomPool, Stage, Swaps,
+    UncoveredVolumeConfig,
+)
 
 
 def two_item_task():
     catalog = (Cuboid("tile", (0.6, 0.6, 0.15)), Cuboid("column", (0.15, 0.15, 0.6)))
     return FittingTask(trimesh.creation.box(extents=(1.0, 1.5, 1.0)), catalog, 4)
+
+
+def test_item_kinds_keep_only_the_named_items(grid_config):
+    pipeline = FittingPipeline(
+        losses={"volume": UncoveredVolumeConfig(grid=grid_config)},
+        proposals={"pool": RandomPool(grid_config, centers=6, orientations=2, scales=1)},
+        steps=(Stage(minimize="volume", steps=(Fill(),),
+                     candidates=CandidateSettings(fixed=("pool",), filters=(ItemKinds(("column",)),))),),
+    )
+    construction = pipeline.fit(two_item_task(), seed=1)
+    assert len(construction) and {placement.item.key for placement in construction} == {"column"}
 
 
 def test_swaps_offer_the_other_items_in_the_same_spot():

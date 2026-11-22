@@ -3,7 +3,7 @@ import pytest
 
 from mesh_to_housing import (
     CandidateSettings, CombinedLossConfig, ConfigError, ExcessSurfaceConfig, Fill, FittingPipeline, ItemSettings,
-    LossTerm, Nudges, Polish, RandomPool, Refine, Repeat, ResidualProposals, Shortlist, Stage,
+    LossTerm, Nudges, Polish, RandomPool, Refine, Repeat, ResidualProposals, Shortlist, SizeRange, Stage,
     UncoveredSurfaceConfig, UncoveredVolumeConfig, VoxelGridConfig,
 )
 
@@ -18,7 +18,8 @@ def staged_pipeline():
         proposals={"pool": RandomPool(GRID, centers=128), "residual": ResidualProposals(grid=GRID, spots=16)},
         steps=(
             Stage(name="main shape", minimize="coverage",
-                  candidates=CandidateSettings(fixed=("pool",), refreshed=("residual",)),
+                  candidates=CandidateSettings(fixed=("pool",), refreshed=("residual",),
+                                               filters=(SizeRange(smallest=0.5),)),
                   items=ItemSettings(budget=0.5, keep_earlier=True), steps=(Fill(),)),
             Repeat(times=4, steps=(Stage(minimize="coverage", candidates=CandidateSettings(refreshed=("residual",)),
                                          steps=(Fill(items=10), Refine(Nudges(), 1))),)),

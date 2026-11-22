@@ -1,8 +1,8 @@
 from .pipeline.processor import MeshProcessor, SparseResult
 from .fitting import (
-    CandidateSettings, Fill, FittingPipeline, ItemSettings, Moves, Nudges, Polish, ProposalSource,
+    CandidateSettings, Fill, FittingPipeline, ItemKinds, ItemSettings, Moves, Nudges, Polish, ProposalSource,
     RandomPool, Refine, Repeat, Report, ResidualProposals, ScoreAll, SelectionConfig, Shortlist,
-    Stage, Step, Swaps,
+    SizeRange, Stage, Step, Swaps,
 )
 from .utils.config import Config, ConfigError
 from .construction import Construction
@@ -23,10 +23,10 @@ from .placement import Placement
 __all__ = [
     "CandidateScorer", "CandidateSettings", "CombinedLoss", "CombinedLossConfig", "Config", "ConfigError",
     "Construction", "Cuboid", "ExcessSurfaceConfig", "ExcessSurfaceLoss", "Execution", "Fill", "FittingPipeline",
-    "FittingTask", "Item", "ItemSettings", "Loss", "LossConfig", "LossSession", "LossTerm", "MeshItem",
+    "FittingTask", "Item", "ItemKinds", "ItemSettings", "Loss", "LossConfig", "LossSession", "LossTerm", "MeshItem",
     "MeshLoader", "MeshProcessor", "Moves", "Nudges", "OutsideVolumeConfig", "OutsideVolumeLoss", "Placement",
     "Polish", "ProposalSource", "RandomPool", "Refine", "Repeat", "Report", "ResidualProposals",
-    "ScoreAll", "SelectionConfig", "Shortlist", "SparseResult", "Stage", "Step", "Swaps",
+    "ScoreAll", "SelectionConfig", "Shortlist", "SizeRange", "SparseResult", "Stage", "Step", "Swaps",
     "TransformConstraints", "UncoveredSurfaceConfig", "UncoveredSurfaceLoss", "UncoveredVolumeConfig",
     "UncoveredVolumeLoss", "VoxelGridConfig", "load_catalog", "prepare_mesh", "resize_mesh",
 ]

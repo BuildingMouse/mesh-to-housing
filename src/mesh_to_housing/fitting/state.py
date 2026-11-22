@@ -7,6 +7,7 @@ from ..construction import Construction
 from ..losses.base import Loss, LossConfig
 from ..placement import Placement
 from ..task import FittingTask
+from .filters.base import CandidateFilter
 from .moves.base import Moves
 from .proposals.base import ProposalSource
 from .selection import CandidateGroup, ScoreAll, SelectionConfig, Selector
@@ -23,6 +24,7 @@ class Scope:
     pools: tuple[CandidateGroup, ...] = ()
     refreshed: tuple[ProposalSource, ...] = ()
     refresh_every: int = 10
+    filters: tuple[CandidateFilter, ...] = ()
     max_items: Optional[int] = None
     kept: frozenset[Placement] = frozenset()
 
@@ -103,6 +105,9 @@ class FitState:
         return [placement for placement in self._placements if placement not in self.scope.kept]
 
     def candidates(self, placements: Sequence[Placement]) -> CandidateGroup:
+        """The placements that pass the filters, as a group the selector can score."""
+        for candidate_filter in self.scope.filters:
+            placements = candidate_filter.apply(self.task, placements)
         return self.selector.candidates(placements)
 
     def propose(self, source: ProposalSource) -> CandidateGroup:
