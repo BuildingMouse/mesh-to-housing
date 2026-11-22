@@ -1,41 +1,33 @@
-from dataclasses import dataclass
-from typing import Literal, get_args
+from typing import Literal
 
 import numpy as np
 
+from ...utils.values import PositiveInt
+from ...geometry.cells import cell_indices, cell_keys
 from ...geometry.coverage import uncovered_surface_keys
 from ...geometry.rotations import random_rotations, rotation_about, rotation_onto
 from ...geometry.settings import SurfaceSettings
 from ...placement import Placement
-from ...validation import positive_integer
-from .base import Proposals
+from .base import ProposalSource, sample_positions
 
-Orientation = Literal["surface", "random"]
+class ResidualProposals(SurfaceSettings, ProposalSource):
+    """Candidates at random spots of the target surface that the construction doesn't cover yet."""
 
-
-@dataclass(frozen=True)
-class ResidualProposals(SurfaceSettings, Proposals):
-    spots: int = 32
-    spins: int = 2
-    scales: int = 5
-    orientation: Orientation = "surface"
+    type: Literal["residual"] = "residual"
+    spots: PositiveInt = 32
+    spins: PositiveInt = 2
+    scales: PositiveInt = 5
+    orientation: Literal["surface", "random"] = "surface"
     skin_only: bool = True
-
-    def __post_init__(self):
-        super().__post_init__()
-        for name in ("spots", "spins", "scales"):
-            positive_integer(getattr(self, name), name)
-        if self.orientation not in get_args(Orientation):
-            raise ValueError("orientation must be 'surface' or 'random'")
 
     def propose(self, task, placements, rng):
         grid = self.voxel_grid(task.target)
         uncovered = uncovered_surface_keys(grid, placements, self.tolerance_for(task.target),
                                            skin_only=self.skin_only)
-        available = grid.surface.index_of(uncovered)
-        if not len(available):
+        cells = cell_indices(uncovered)
+        if not len(cells):
             return []
-        spots = available[rng.choice(len(available), min(self.spots, len(available)), replace=False)]
+        spots = grid.surface.index_of(cell_keys(cells[sample_positions(rng, len(cells), self.spots)]))
         scales = task.constraints.sample_scales(self.scales)
         proposals = []
         for point, normal in zip(grid.surface.points[spots], grid.surface.normals[spots]):

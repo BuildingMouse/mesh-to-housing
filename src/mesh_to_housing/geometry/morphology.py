@@ -4,7 +4,7 @@ from typing import Sequence
 
 import numpy as np
 
-from ..execution import map_chunks
+from ..utils.execution import map_chunks
 from .cells import CellBox, CellKeys, key_offsets
 
 _FACES = key_offsets(np.vstack((np.eye(3, dtype=int), -np.eye(3, dtype=int))))

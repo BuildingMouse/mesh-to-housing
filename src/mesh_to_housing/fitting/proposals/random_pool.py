@@ -1,28 +1,27 @@
-from dataclasses import dataclass, field
+from typing import Literal
 
-from ...geometry.config import VoxelGridConfig
+from pydantic import Field
+
+from ...utils.config import Config
+from ...utils.values import PositiveInt
 from ...geometry.rotations import sample_rotations
-from ...geometry.voxel_grid import VoxelGrid
+from ...geometry.voxel_grid import VoxelGrid, VoxelGridConfig
 from ...placement import Placement
-from ...validation import positive_integer
-from .base import Proposals
+from .base import ProposalSource, sample_positions
 
 
-@dataclass(frozen=True)
-class RandomPool(Proposals):
-    grid: VoxelGridConfig = field(default_factory=VoxelGridConfig)
-    centers: int = 256
-    orientations: int = 8
-    scales: int = 5
+class RandomPool(Config, ProposalSource):
+    """Candidates at random target cells, each with every orientation, scale and item."""
 
-    def __post_init__(self):
-        for name in ("centers", "orientations", "scales"):
-            positive_integer(getattr(self, name), name)
+    type: Literal["random_pool"] = "random_pool"
+    grid: VoxelGridConfig = Field(default_factory=VoxelGridConfig)
+    centers: PositiveInt = 256
+    orientations: PositiveInt = 8
+    scales: PositiveInt = 5
 
     def propose(self, task, placements, rng):
         grid = VoxelGrid.from_mesh(task.target, self.grid)
-        indices = grid.indices[rng.choice(len(grid.indices), min(self.centers, len(grid.indices)), replace=False)]
-        points = grid.origin + indices * grid.pitch
+        points = grid.points_of(grid.indices[sample_positions(rng, len(grid.indices), self.centers)])
         scales = task.constraints.sample_scales(self.scales)
         rotations = sample_rotations(self.orientations, rng)
         return [Placement(item, point, rotation, scale)

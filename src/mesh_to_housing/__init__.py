@@ -1,12 +1,14 @@
 from .pipeline.processor import MeshProcessor, SparseResult
-from .algorithms import RandomPlacementGreedy
-from .fitting import FittingAlgorithm, Greedy, Proposals, RandomPool, ResidualProposals, ScoreAll, Selection
+from .fitting import (
+    CandidateSettings, Fill, FittingPipeline, ItemKinds, ItemSettings, Moves, Nudges, Polish, ProposalSource,
+    RandomPool, Refine, Repeat, Report, ResidualProposals, ScoreAll, SelectionConfig, Shortlist,
+    SizeRange, Stage, Step, Swaps,
+)
+from .utils.config import Config, ConfigError
 from .construction import Construction
-from .execution import Execution
-from .constraints import TransformConstraints
-from .fit import fit
-from .fitting_task import FittingTask
-from .geometry.config import VoxelGridConfig
+from .utils.execution import Execution
+from .task import FittingTask, TransformConstraints
+from .geometry.voxel_grid import VoxelGridConfig
 from .items import Cuboid, Item, MeshItem, load_catalog
 from .losses import (
     CandidateScorer, CombinedLoss, CombinedLossConfig, ExcessSurfaceConfig, ExcessSurfaceLoss,
@@ -19,12 +21,12 @@ from .meshes.preparation import prepare_mesh, resize_mesh
 from .placement import Placement
 
 __all__ = [
-    "CandidateScorer", "CombinedLoss", "CombinedLossConfig", "Construction", "Cuboid", "FittingAlgorithm",
-    "ExcessSurfaceConfig", "ExcessSurfaceLoss", "Execution", "FittingTask", "Greedy", "Item",
-    "Loss", "LossConfig", "LossSession", "LossTerm", "MeshItem", "MeshLoader", "MeshProcessor", "OutsideVolumeConfig",
-    "OutsideVolumeLoss", "Placement", "Proposals", "RandomPlacementGreedy", "RandomPool", "ResidualProposals",
-    "ScoreAll", "Selection",
-    "SparseResult", "TransformConstraints",
-    "UncoveredSurfaceConfig", "UncoveredSurfaceLoss", "UncoveredVolumeConfig", "UncoveredVolumeLoss", "VoxelGridConfig",
-    "fit", "load_catalog", "prepare_mesh", "resize_mesh",
+    "CandidateScorer", "CandidateSettings", "CombinedLoss", "CombinedLossConfig", "Config", "ConfigError",
+    "Construction", "Cuboid", "ExcessSurfaceConfig", "ExcessSurfaceLoss", "Execution", "Fill", "FittingPipeline",
+    "FittingTask", "Item", "ItemKinds", "ItemSettings", "Loss", "LossConfig", "LossSession", "LossTerm", "MeshItem",
+    "MeshLoader", "MeshProcessor", "Moves", "Nudges", "OutsideVolumeConfig", "OutsideVolumeLoss", "Placement",
+    "Polish", "ProposalSource", "RandomPool", "Refine", "Repeat", "Report", "ResidualProposals",
+    "ScoreAll", "SelectionConfig", "Shortlist", "SizeRange", "SparseResult", "Stage", "Step", "Swaps",
+    "TransformConstraints", "UncoveredSurfaceConfig", "UncoveredSurfaceLoss", "UncoveredVolumeConfig",
+    "UncoveredVolumeLoss", "VoxelGridConfig", "load_catalog", "prepare_mesh", "resize_mesh",
 ]

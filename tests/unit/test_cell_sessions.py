@@ -2,7 +2,9 @@
 import numpy as np
 import pytest
 
-from mesh_to_housing import ExcessSurfaceConfig, OutsideVolumeConfig, UncoveredSurfaceConfig, UncoveredVolumeConfig
+from mesh_to_housing import (
+    ExcessSurfaceConfig, Loss, OutsideVolumeConfig, UncoveredSurfaceConfig, UncoveredVolumeConfig,
+)
 
 from ..reference import expanded, sampled_cells, skin
 
@@ -40,7 +42,7 @@ def test_values_and_gains_follow_adds_and_removes(task, grid_config, grid, place
 
     reference = len(target if kind.endswith("volume") else surface)
     penalty = kind in ("outside volume", "excess surface")
-    session = loss_config(kind, grid_config, tolerance).build().session(task.target)
+    session = Loss.from_config(loss_config(kind, grid_config, tolerance)).session(task.target)
     scorer = session.scorer(placements)
     placed = []
     for adding, index in ADD_AND_REMOVE:

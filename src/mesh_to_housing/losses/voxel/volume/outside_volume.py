@@ -1,15 +1,15 @@
-from dataclasses import dataclass
+from typing import Literal
 
-from ...geometry.cells import select_keys
-from .base import PenaltySession, VoxelLoss, VoxelLossConfig
+from ....geometry.cells import select_keys
+from ...base import implements
+from ..base import PenaltySession, VoxelLoss, VoxelLossConfig
 
 
-@dataclass(frozen=True)
 class OutsideVolumeConfig(VoxelLossConfig):
-    def build(self):
-        return OutsideVolumeLoss(self)
+    type: Literal["outside_volume"] = "outside_volume"
 
 
+@implements(OutsideVolumeConfig)
 class OutsideVolumeLoss(VoxelLoss):
     """Construction volume outside the target divided by target volume."""
 

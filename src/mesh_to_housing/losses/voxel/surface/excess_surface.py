@@ -1,16 +1,16 @@
-from dataclasses import dataclass
+from typing import Literal
 
 from ....geometry.cells import select_keys
+from ...base import implements
 from ...cell_sessions import PenaltySession
 from ..base import SurfaceToleranceConfig, VoxelLoss
 
 
-@dataclass(frozen=True)
 class ExcessSurfaceConfig(SurfaceToleranceConfig):
-    def build(self):
-        return ExcessSurfaceLoss(self)
+    type: Literal["excess_surface"] = "excess_surface"
 
 
+@implements(ExcessSurfaceConfig)
 class ExcessSurfaceLoss(VoxelLoss):
     def session(self, target):
         grid = self.grid(target)

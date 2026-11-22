@@ -46,3 +46,8 @@ class Placement:
         transform[:3, :3] = self.rotation * self.scale
         transform[:3, 3] = self.center
         return transform
+
+    @property
+    def box_center(self) -> np.ndarray:
+        """Where the middle of the item's bounding box lies in the world."""
+        return self.center + self.rotation @ self.item.box_center * self.scale

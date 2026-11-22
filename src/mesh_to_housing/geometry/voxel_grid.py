@@ -5,8 +5,22 @@ from typing import Optional
 import numpy as np
 import trimesh
 
+from ..utils.config import Config
+from ..utils.values import NonNegativeFloat, PositiveFloat, PositiveInt
 from .cells import CellBox, CellKeys, cell_indices, cell_keys
-from .config import VoxelGridConfig
+
+
+class VoxelGridConfig(Config):
+    """Lengths are in target units, so they keep their meaning at any pitch."""
+
+    voxel_pitch: Optional[PositiveFloat] = None
+    resolution: PositiveInt = 96
+    gap_closing: NonNegativeFloat = 0.0
+    target_samples: PositiveInt = 3
+    max_cells: PositiveInt = 100_000_000
+
+    def pitch_for(self, mesh):
+        return float(mesh.extents.max() / self.resolution if self.voxel_pitch is None else self.voxel_pitch)
 
 
 @dataclass(eq=False)

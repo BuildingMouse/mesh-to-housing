@@ -1,4 +1,8 @@
-from .base import CandidateScorer, IncrementalLoss, Loss, LossConfig, LossSession
+from typing import Annotated, Union
+
+from pydantic import Field
+
+from .base import CandidateScorer, IncrementalLoss, Loss, LossConfig, LossSession, implements
 from .combined import CombinedLoss, CombinedLossConfig, LossTerm
 from .sessions import FullEvaluationSession
 from .voxel import (
@@ -7,10 +11,17 @@ from .voxel import (
     UncoveredVolumeLoss,
 )
 
+LossConfigs = Annotated[
+    Union[CombinedLossConfig, ExcessSurfaceConfig, OutsideVolumeConfig, UncoveredSurfaceConfig, UncoveredVolumeConfig],
+    Field(discriminator="type"),
+]
+LossTerm.model_rebuild()
+CombinedLossConfig.model_rebuild()
+
 __all__ = [
     "CandidateScorer", "CombinedLoss", "CombinedLossConfig", "FullEvaluationSession", "IncrementalLoss", "Loss",
-    "LossConfig", "LossSession", "LossTerm",
+    "LossConfig", "LossConfigs", "LossSession", "LossTerm",
     "ExcessSurfaceConfig", "ExcessSurfaceLoss",
     "OutsideVolumeConfig", "OutsideVolumeLoss", "UncoveredSurfaceConfig", "UncoveredSurfaceLoss",
-    "UncoveredVolumeConfig", "UncoveredVolumeLoss",
+    "UncoveredVolumeConfig", "UncoveredVolumeLoss", "implements",
 ]

@@ -1,18 +1,17 @@
-from dataclasses import dataclass
+from typing import Literal
 
 from ....geometry.coverage import covered_surface_keys
+from ...base import implements
 from ...cell_sessions import CoverageSession
 from ..base import SurfaceToleranceConfig, VoxelLoss
 
 
-@dataclass(frozen=True)
 class UncoveredSurfaceConfig(SurfaceToleranceConfig):
+    type: Literal["uncovered_surface"] = "uncovered_surface"
     skin_only: bool = False
 
-    def build(self):
-        return UncoveredSurfaceLoss(self)
 
-
+@implements(UncoveredSurfaceConfig)
 class UncoveredSurfaceLoss(VoxelLoss):
     def session(self, target):
         grid = self.grid(target)

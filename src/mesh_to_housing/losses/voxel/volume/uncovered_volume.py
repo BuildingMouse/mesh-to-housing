@@ -1,15 +1,15 @@
-from dataclasses import dataclass
+from typing import Literal
 
-from ...geometry.cells import select_keys
-from .base import CoverageSession, VoxelLoss, VoxelLossConfig
+from ....geometry.cells import select_keys
+from ...base import implements
+from ..base import CoverageSession, VoxelLoss, VoxelLossConfig
 
 
-@dataclass(frozen=True)
 class UncoveredVolumeConfig(VoxelLossConfig):
-    def build(self):
-        return UncoveredVolumeLoss(self)
+    type: Literal["uncovered_volume"] = "uncovered_volume"
 
 
+@implements(UncoveredVolumeConfig)
 class UncoveredVolumeLoss(VoxelLoss):
     """Uncovered target volume divided by target volume."""
 

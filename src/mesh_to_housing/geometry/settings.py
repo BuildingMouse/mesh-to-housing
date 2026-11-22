@@ -1,28 +1,21 @@
-from dataclasses import dataclass, field
 from typing import Optional
 
-import numpy as np
+from pydantic import Field
 
-from .config import VoxelGridConfig
-from .voxel_grid import VoxelGrid
+from ..utils.config import Config
+from ..utils.values import NonNegativeFloat
+from .voxel_grid import VoxelGrid, VoxelGridConfig
 
 
-@dataclass(frozen=True)
-class GridSettings:
-    grid: VoxelGridConfig = field(default_factory=VoxelGridConfig)
+class GridSettings(Config):
+    grid: VoxelGridConfig = Field(default_factory=VoxelGridConfig)
 
     def voxel_grid(self, target):
         return VoxelGrid.from_mesh(target, self.grid)
 
 
-@dataclass(frozen=True)
 class SurfaceSettings(GridSettings):
-    surface_tolerance: Optional[float] = None
-
-    def __post_init__(self):
-        if self.surface_tolerance is not None and (
-                not np.isfinite(self.surface_tolerance) or self.surface_tolerance < 0):
-            raise ValueError("surface_tolerance must be finite and nonnegative")
+    surface_tolerance: Optional[NonNegativeFloat] = None
 
     def tolerance_for(self, target):
         return float(target.extents.max() / 96 if self.surface_tolerance is None else self.surface_tolerance)

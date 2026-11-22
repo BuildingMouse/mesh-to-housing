@@ -4,34 +4,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from mesh_to_housing import (
-    CombinedLossConfig, ExcessSurfaceConfig, Greedy, Loss, LossSession, LossTerm, OutsideVolumeConfig, RandomPool,
-    ResidualProposals, UncoveredSurfaceConfig, UncoveredVolumeConfig, VoxelGridConfig, fit,
-)
+from mesh_to_housing import FittingPipeline, Loss, LossConfig, LossSession
+from mesh_to_housing.losses import LossConfigs, implements
 
-SNAPSHOTS = Path(__file__).parent / "snapshots/greedy_fits.json"
-GRID = VoxelGridConfig(resolution=16)
-POOL = RandomPool(GRID, centers=16, orientations=4, scales=2)
-RESIDUAL = ResidualProposals(grid=GRID, spots=4, spins=2, scales=2)
-
-
-def volume_loss():
-    return CombinedLossConfig({
-        "uncovered": LossTerm(UncoveredVolumeConfig(grid=GRID)),
-        "outside": LossTerm(OutsideVolumeConfig(grid=GRID)),
-    }).build()
-
-
-def surface_loss():
-    return CombinedLossConfig({
-        "uncovered": LossTerm(UncoveredSurfaceConfig(grid=GRID, skin_only=True)),
-        "excess": LossTerm(ExcessSurfaceConfig(grid=GRID)),
-    }).build()
-
-
+HERE = Path(__file__).parent
+SNAPSHOTS = HERE / "snapshots/greedy_fits.json"
 FITS = {
-    "volume": (volume_loss, Greedy(pool=POOL)),
-    "surface with residual proposals": (surface_loss, Greedy(pool=POOL, renewed=RESIDUAL, renew_every=3)),
+    "volume": FittingPipeline.load(HERE / "pipelines/volume_greedy.yaml"),
+    "surface with residual proposals": FittingPipeline.load(HERE / "pipelines/surface_greedy.yaml"),
 }
 
 
@@ -51,8 +31,7 @@ def save_snapshot(name, saved):
 
 @pytest.mark.parametrize("name", FITS)
 def test_fit_matches_snapshot(dinosaur, request, name):
-    loss, algorithm = FITS[name]
-    construction = fit(dinosaur, algorithm=algorithm, loss=loss(), seed=7)
+    construction = FITS[name].fit(dinosaur, seed=7)
     assert 0 < len(construction) <= dinosaur.max_items
     if request.config.getoption("--update-snapshots"):
         save_snapshot(name, records(construction))
@@ -84,10 +63,15 @@ class _OneByOneSession(LossSession):
         self._session.remove(placement)
 
 
+class _OneByOneConfig(LossConfig):
+    inner: LossConfigs
+
+
+@implements(_OneByOneConfig)
 class _OneByOneLoss(Loss):
-    def __init__(self, loss):
-        super().__init__(loss.config)
-        self._loss = loss
+    def __init__(self, config):
+        super().__init__(config)
+        self._loss = Loss.from_config(config.inner)
 
     def __call__(self, target, construction):
         return self._loss(target, construction)
@@ -98,9 +82,11 @@ class _OneByOneLoss(Loss):
 
 @pytest.mark.parametrize("name", FITS)
 def test_batched_scoring_gives_the_same_fit_as_one_by_one(dinosaur, name):
-    loss, algorithm = FITS[name]
-    batched = fit(dinosaur, algorithm=algorithm, loss=loss(), seed=7)
-    one_by_one = fit(dinosaur, algorithm=algorithm, loss=_OneByOneLoss(loss()), seed=7)
+    plan = FITS[name]
+    batched = plan.fit(dinosaur, seed=7)
+    one_by_one_losses = {loss: _OneByOneConfig(inner=config) for loss, config in plan.losses.items()}
+    # model_copy skips validation, which would reject a loss kind that configs can't name.
+    one_by_one = plan.model_copy(update={"losses": one_by_one_losses}).fit(dinosaur, seed=7)
     assert len(batched) == len(one_by_one)
     for left, right in zip(batched, one_by_one):
         assert left.item is right.item and left.scale == right.scale

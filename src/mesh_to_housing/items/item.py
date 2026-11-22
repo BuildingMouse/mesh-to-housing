@@ -30,6 +30,12 @@ class Item(ABC):
     def box_center(self):
         return self.bounds.mean(axis=0)
 
+    @property
+    def box_size(self) -> np.ndarray:
+        """The sides of the bounding box along the item's own axes."""
+        low, high = self.bounds
+        return high - low
+
     def contains(self, points):
         if not self.mesh.is_watertight:
             raise ValueError(f"Item {self.key!r} needs a watertight mesh for volume queries")
