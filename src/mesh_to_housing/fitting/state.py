@@ -7,6 +7,7 @@ from ..construction import Construction
 from ..losses.base import Loss, LossConfig
 from ..placement import Placement
 from ..task import FittingTask
+from .moves.base import Moves
 from .proposals.base import ProposalSource
 from .selection import CandidateGroup, ScoreAll, SelectionConfig, Selector
 
@@ -23,6 +24,7 @@ class Scope:
     refreshed: tuple[ProposalSource, ...] = ()
     refresh_every: int = 10
     max_items: Optional[int] = None
+    kept: frozenset[Placement] = frozenset()
 
 
 class FitState:
@@ -96,6 +98,10 @@ class FitState:
     def construction(self) -> Construction:
         return Construction(self.placements)
 
+    def revisable(self) -> list[Placement]:
+        """The placements that refine and polish passes may change, in placement order."""
+        return [placement for placement in self._placements if placement not in self.scope.kept]
+
     def candidates(self, placements: Sequence[Placement]) -> CandidateGroup:
         return self.selector.candidates(placements)
 
@@ -116,3 +122,11 @@ class FitState:
         del self._placements[position]
         return position
 
+    def replace_with_best_move(self, placement: Placement, moves: Moves) -> Placement:
+        """Replace the placement with its best move."""
+        position = self.remove(placement)
+        group = self.candidates(moves.around(self.task, placement, self.placements))
+        choice = self.selector.best([group], self.selector.gain(placement) + self.min_gain)
+        placed = placement if choice is None else group.take(choice[1])
+        self.add(placed, position)
+        return placed

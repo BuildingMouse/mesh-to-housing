@@ -8,7 +8,7 @@ from ..utils.config import Config
 from ..utils.values import Fraction, PositiveInt
 from .selection import SelectionConfigs
 from .state import FitState, Scope
-from .steps import Fill, Step
+from .steps import Fill, Polish, Refine, Step
 
 
 class CandidateSettings(Config):
@@ -34,11 +34,16 @@ class CandidateSettings(Config):
 
 
 class ItemSettings(Config):
-    """How many items a stage may add, as a share of the task's item budget."""
+    """Which items a stage may place and change.
+    keep_earlier protects earlier items from refine and polish.
+    """
 
     budget: Optional[Fraction] = None
+    keep_earlier: bool = False
 
     def apply_to(self, state: FitState, scope: Scope) -> Scope:
+        if self.keep_earlier:
+            scope = replace(scope, kept=frozenset(state.placements))
         if self.budget is not None:
             added = int(round(self.budget * state.task.max_items))
             scope = replace(scope, max_items=len(state.placements) + added)
@@ -132,7 +137,8 @@ def _kind(value: Any) -> Optional[str]:
 
 
 StepConfigs = Annotated[
-    Union[Annotated[Fill, Tag("fill")], Annotated[Stage, Tag("stage")], Annotated[Repeat, Tag("repeat")]],
+    Union[Annotated[Fill, Tag("fill")], Annotated[Refine, Tag("refine")], Annotated[Polish, Tag("polish")],
+          Annotated[Stage, Tag("stage")], Annotated[Repeat, Tag("repeat")]],
     Discriminator(_kind),
 ]
 Stage.model_rebuild()

@@ -3,8 +3,8 @@ import pytest
 
 from mesh_to_housing import (
     CandidateSettings, CombinedLossConfig, ConfigError, ExcessSurfaceConfig, Fill, FittingPipeline, ItemSettings,
-    LossTerm, RandomPool, Repeat, ResidualProposals, Shortlist, Stage, UncoveredSurfaceConfig, UncoveredVolumeConfig,
-    VoxelGridConfig,
+    LossTerm, Nudges, Polish, RandomPool, Refine, Repeat, ResidualProposals, Shortlist, Stage,
+    UncoveredSurfaceConfig, UncoveredVolumeConfig, VoxelGridConfig,
 )
 
 GRID = VoxelGridConfig(resolution=64)
@@ -19,11 +19,11 @@ def staged_pipeline():
         steps=(
             Stage(name="main shape", minimize="coverage",
                   candidates=CandidateSettings(fixed=("pool",), refreshed=("residual",)),
-                  items=ItemSettings(budget=0.5), steps=(Fill(),)),
+                  items=ItemSettings(budget=0.5, keep_earlier=True), steps=(Fill(),)),
             Repeat(times=4, steps=(Stage(minimize="coverage", candidates=CandidateSettings(refreshed=("residual",)),
-                                         steps=(Fill(items=10, retries=1),)),)),
+                                         steps=(Fill(items=10), Refine(Nudges(), 1))),)),
             Stage(name="finish", minimize="coverage", select=Shortlist(UncoveredVolumeConfig(grid=GRID), size=8),
-                  steps=(Fill(),)),
+                  steps=(Polish(Nudges(shift=0.5), 2),)),
         ),
         metrics={"uncovered": UncoveredSurfaceConfig()},
     )
