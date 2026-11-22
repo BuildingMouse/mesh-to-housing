@@ -5,8 +5,10 @@ from typing import Annotated
 from pydantic import Field
 
 PositiveInt = Annotated[int, Field(strict=True, gt=0)]
+NonNegativeInt = Annotated[int, Field(strict=True, ge=0)]
 PositiveFloat = Annotated[float, Field(gt=0, allow_inf_nan=False)]
 NonNegativeFloat = Annotated[float, Field(ge=0, allow_inf_nan=False)]
+Fraction = Annotated[float, Field(ge=0, le=1)]
 
 
 def positive_integer(value, name):

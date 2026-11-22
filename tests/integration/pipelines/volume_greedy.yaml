@@ -1,0 +1,18 @@
+losses:
+  volume:
+    type: combined
+    terms:
+      uncovered:
+        loss: {type: uncovered_volume, grid: &grid {resolution: 16}}
+        loss_scale: 1
+      outside:
+        loss: {type: outside_volume, grid: *grid}
+        loss_scale: 1
+proposals:
+  pool: {type: random_pool, grid: *grid, centers: 16, orientations: 4, scales: 2}
+steps:
+  - stage: fill
+    minimize: volume
+    candidates: {fixed: [pool]}
+    steps:
+      - type: fill

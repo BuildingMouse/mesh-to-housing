@@ -7,10 +7,10 @@ from ...utils.values import PositiveInt
 from ...geometry.rotations import sample_rotations
 from ...geometry.voxel_grid import VoxelGrid, VoxelGridConfig
 from ...placement import Placement
-from .base import Proposals, sample_positions
+from .base import ProposalSource, sample_positions
 
 
-class RandomPool(Config, Proposals):
+class RandomPool(Config, ProposalSource):
     """Candidates at random target cells, each with every orientation, scale and item."""
 
     type: Literal["random_pool"] = "random_pool"

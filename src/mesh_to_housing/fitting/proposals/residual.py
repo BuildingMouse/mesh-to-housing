@@ -8,9 +8,9 @@ from ...geometry.coverage import uncovered_surface_keys
 from ...geometry.rotations import random_rotations, rotation_about, rotation_onto
 from ...geometry.settings import SurfaceSettings
 from ...placement import Placement
-from .base import Proposals, sample_positions
+from .base import ProposalSource, sample_positions
 
-class ResidualProposals(SurfaceSettings, Proposals):
+class ResidualProposals(SurfaceSettings, ProposalSource):
     """Candidates at random spots of the target surface that the construction doesn't cover yet."""
 
     type: Literal["residual"] = "residual"

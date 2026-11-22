@@ -1,9 +1,11 @@
 from .pipeline.processor import MeshProcessor, SparseResult
-from .fitting import FittingAlgorithm, Greedy, Proposals, RandomPool, ResidualProposals, ScoreAll, Selection
+from .fitting import (
+    CandidateSettings, Fill, FittingPipeline, ItemSettings, ProposalSource, RandomPool, Repeat, Report,
+    ResidualProposals, ScoreAll, SelectionConfig, Shortlist, Stage, Step,
+)
 from .utils.config import Config, ConfigError
 from .construction import Construction
 from .utils.execution import Execution
-from .fit import fit
 from .task import FittingTask, TransformConstraints
 from .geometry.voxel_grid import VoxelGridConfig
 from .items import Cuboid, Item, MeshItem, load_catalog
@@ -18,12 +20,12 @@ from .meshes.preparation import prepare_mesh, resize_mesh
 from .placement import Placement
 
 __all__ = [
-    "CandidateScorer", "CombinedLoss", "CombinedLossConfig", "Config", "ConfigError", "Construction", "Cuboid", "FittingAlgorithm",
-    "ExcessSurfaceConfig", "ExcessSurfaceLoss", "Execution", "FittingTask", "Greedy", "Item",
-    "Loss", "LossConfig", "LossSession", "LossTerm", "MeshItem", "MeshLoader", "MeshProcessor", "OutsideVolumeConfig",
-    "OutsideVolumeLoss", "Placement", "Proposals", "RandomPool", "ResidualProposals",
-    "ScoreAll", "Selection",
-    "SparseResult", "TransformConstraints",
-    "UncoveredSurfaceConfig", "UncoveredSurfaceLoss", "UncoveredVolumeConfig", "UncoveredVolumeLoss", "VoxelGridConfig",
-    "fit", "load_catalog", "prepare_mesh", "resize_mesh",
+    "CandidateScorer", "CandidateSettings", "CombinedLoss", "CombinedLossConfig", "Config", "ConfigError",
+    "Construction", "Cuboid", "ExcessSurfaceConfig", "ExcessSurfaceLoss", "Execution", "Fill", "FittingPipeline",
+    "FittingTask", "Item", "ItemSettings", "Loss", "LossConfig", "LossSession", "LossTerm", "MeshItem",
+    "MeshLoader", "MeshProcessor", "OutsideVolumeConfig", "OutsideVolumeLoss", "Placement",
+    "ProposalSource", "RandomPool", "Repeat", "Report", "ResidualProposals",
+    "ScoreAll", "SelectionConfig", "Shortlist", "SparseResult", "Stage", "Step",
+    "TransformConstraints", "UncoveredSurfaceConfig", "UncoveredSurfaceLoss", "UncoveredVolumeConfig",
+    "UncoveredVolumeLoss", "VoxelGridConfig", "load_catalog", "prepare_mesh", "resize_mesh",
 ]

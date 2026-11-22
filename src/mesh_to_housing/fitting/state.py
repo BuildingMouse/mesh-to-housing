@@ -1,30 +1,88 @@
-from dataclasses import dataclass, field
-from typing import Optional, Sequence
+from dataclasses import dataclass, field, replace
+from typing import Mapping, Optional, Sequence
 
 import numpy as np
 
 from ..construction import Construction
+from ..losses.base import Loss, LossConfig
 from ..placement import Placement
 from ..task import FittingTask
-from .proposals.base import Proposals
-from .selection import Candidates, Selector
+from .proposals.base import ProposalSource
+from .selection import CandidateGroup, ScoreAll, SelectionConfig, Selector
 
 
-@dataclass
+@dataclass(frozen=True)
+class Scope:
+    """What the steps use at one point in a fit. A stage opens its own scope and puts the outer one back when it
+    ends.
+    """
+
+    loss: Optional[str] = None
+    selection: SelectionConfig = field(default_factory=ScoreAll)
+    pools: tuple[CandidateGroup, ...] = ()
+    refreshed: tuple[ProposalSource, ...] = ()
+    refresh_every: int = 10
+    max_items: Optional[int] = None
+
+
 class FitState:
-    task: FittingTask
-    selector: Selector
-    rng: np.random.Generator
-    min_gain: float = 1e-12
-    pool: Optional[Candidates] = None
-    renewed: tuple[Proposals, ...] = ()
-    renew_every: int = 10
-    _placements: list[Placement] = field(default_factory=list, init=False, repr=False)
+    """A fit in progress, shared by the steps. Placements are never changed in place.
+    A gain must exceed min_gain, so rounding noise in a sum of loss terms can't add an item.
+    """
 
-    @classmethod
-    def start(cls, task, selection, loss, rng, *, min_gain=1e-12, renewed=(), renew_every=10):
-        return cls(task, selection.start(task.target, loss.session(task.target)), rng, min_gain=min_gain,
-                   renewed=renewed, renew_every=renew_every)
+    def __init__(self, task: FittingTask, rng: np.random.Generator, losses: Mapping[str, LossConfig],
+                 proposals: Mapping[str, ProposalSource], scope: Scope, min_gain: float = 1e-12,
+                 placements: Sequence[Placement] = ()):
+        self.task = task
+        self.rng = rng
+        self.min_gain = min_gain
+        self._loss_configs = losses
+        self._built: dict[str, Loss] = {}
+        self._proposals = proposals
+        self._placements: list[Placement] = list(placements)
+        self.scope = scope
+        self._selector: Optional[Selector] = None if scope.loss is None else self._start_selector(scope)
+
+    @property
+    def selector(self) -> Selector:
+        if self._selector is None:
+            raise RuntimeError("No loss is set here; set minimize on the enclosing stage")
+        return self._selector
+
+    def _loss(self, name: str) -> Loss:
+        """The pipeline's loss of that name, built once per fit."""
+        if name not in self._built:
+            if name not in self._loss_configs:
+                raise KeyError(f"The pipeline has no loss named {name!r}")
+            self._built[name] = Loss.from_config(self._loss_configs[name])
+        return self._built[name]
+
+    def proposals_named(self, name: str) -> ProposalSource:
+        if name not in self._proposals:
+            raise KeyError(f"The pipeline has no proposals named {name!r}")
+        return self._proposals[name]
+
+    def use(self, scope: Scope) -> None:
+        """Switch to another scope. A new loss or selection rescores the construction and the pools. A rescored
+        pool shares its taken marks with the old one, so no candidate is placed twice.
+        """
+        if (scope.loss, scope.selection) != (self.scope.loss, self.scope.selection):
+            self._selector = None if scope.loss is None else self._start_selector(scope)
+            if self._selector is not None:
+                scope = replace(scope, pools=tuple(map(self._rescored, scope.pools)))
+        self.scope = scope
+
+    def _rescored(self, pool: CandidateGroup) -> CandidateGroup:
+        rescored = self.selector.candidates(pool.placements)
+        rescored.taken = pool.taken
+        return rescored
+
+    def _start_selector(self, scope: Scope) -> Selector:
+        session = self._loss(scope.loss).session(self.task.target)
+        selector = scope.selection.start(self.task.target, session)
+        for placement in self._placements:
+            selector.add(placement)
+        return selector
 
     @property
     def placements(self) -> tuple[Placement, ...]:
@@ -32,26 +90,29 @@ class FitState:
 
     @property
     def budget(self) -> int:
-        return self.task.max_items
+        limit = self.scope.max_items
+        return self.task.max_items if limit is None else min(limit, self.task.max_items)
 
     def construction(self) -> Construction:
         return Construction(self.placements)
 
-    def candidates(self, placements: Sequence[Placement]) -> Candidates:
+    def candidates(self, placements: Sequence[Placement]) -> CandidateGroup:
         return self.selector.candidates(placements)
 
-    def propose_pool(self, source) -> None:
-        self.pool = self.candidates(source.propose(self.task, self.placements, self.rng))
+    def propose(self, source: ProposalSource) -> CandidateGroup:
+        return self.candidates(source.propose(self.task, self.placements, self.rng))
 
-    def renew(self) -> list[Candidates]:
-        return [self.candidates(source.propose(self.task, self.placements, self.rng)) for source in self.renewed]
+    def propose_refreshed(self) -> list[CandidateGroup]:
+        return [self.propose(source) for source in self.scope.refreshed]
 
     def add(self, placement: Placement, position: Optional[int] = None) -> None:
         self.selector.add(placement)
         self._placements.insert(len(self._placements) if position is None else position, placement)
 
     def remove(self, placement: Placement) -> int:
+        """Take the placement out, and return where it was, so it can be put back in the same place."""
         position = next(index for index, placed in enumerate(self._placements) if placed is placement)
         self.selector.remove(placement)
         del self._placements[position]
         return position
+

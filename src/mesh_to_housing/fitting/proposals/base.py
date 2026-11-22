@@ -7,7 +7,7 @@ from ...placement import Placement
 from ...task import FittingTask
 
 
-class Proposals(ABC):
+class ProposalSource(ABC):
     """A source of candidate placements for a construction. Sources keep no state between calls."""
 
     @abstractmethod
