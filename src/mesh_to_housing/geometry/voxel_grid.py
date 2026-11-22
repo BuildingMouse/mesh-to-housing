@@ -5,27 +5,19 @@ from typing import Optional
 import numpy as np
 import trimesh
 
-from ..utils.values import positive_integer
+from ..utils.config import Config
+from ..utils.values import NonNegativeFloat, PositiveFloat, PositiveInt
 from .cells import CellBox, CellKeys, cell_indices, cell_keys
 
 
-@dataclass(frozen=True)
-class VoxelGridConfig:
+class VoxelGridConfig(Config):
     """Lengths are in target units, so they keep their meaning at any pitch."""
 
-    voxel_pitch: float = None
-    resolution: int = 96
-    gap_closing: float = 0.0
-    target_samples: int = 3
-    max_cells: int = 100_000_000
-
-    def __post_init__(self):
-        if self.voxel_pitch is not None and (not np.isfinite(self.voxel_pitch) or self.voxel_pitch <= 0):
-            raise ValueError("voxel_pitch must be finite and positive")
-        if not np.isfinite(self.gap_closing) or self.gap_closing < 0:
-            raise ValueError("gap_closing must be finite and nonnegative")
-        for name in ("resolution", "target_samples", "max_cells"):
-            positive_integer(getattr(self, name), name)
+    voxel_pitch: Optional[PositiveFloat] = None
+    resolution: PositiveInt = 96
+    gap_closing: NonNegativeFloat = 0.0
+    target_samples: PositiveInt = 3
+    max_cells: PositiveInt = 100_000_000
 
     def pitch_for(self, mesh):
         return float(mesh.extents.max() / self.resolution if self.voxel_pitch is None else self.voxel_pitch)

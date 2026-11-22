@@ -16,17 +16,17 @@ RESIDUAL = ResidualProposals(grid=GRID, spots=4, spins=2, scales=2)
 
 
 def volume_loss():
-    return CombinedLossConfig({
-        "uncovered": LossTerm(UncoveredVolumeConfig(grid=GRID)),
-        "outside": LossTerm(OutsideVolumeConfig(grid=GRID)),
-    }).build()
+    return Loss.from_config(CombinedLossConfig({
+        "uncovered": LossTerm(UncoveredVolumeConfig(grid=GRID), 1),
+        "outside": LossTerm(OutsideVolumeConfig(grid=GRID), 1),
+    }))
 
 
 def surface_loss():
-    return CombinedLossConfig({
-        "uncovered": LossTerm(UncoveredSurfaceConfig(grid=GRID, skin_only=True)),
-        "excess": LossTerm(ExcessSurfaceConfig(grid=GRID)),
-    }).build()
+    return Loss.from_config(CombinedLossConfig({
+        "uncovered": LossTerm(UncoveredSurfaceConfig(grid=GRID, skin_only=True), 1),
+        "excess": LossTerm(ExcessSurfaceConfig(grid=GRID), 1),
+    }))
 
 
 FITS = {

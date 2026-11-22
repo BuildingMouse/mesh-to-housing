@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Optional, Sequence
+from typing import Literal, Optional, Sequence
 
 import numpy as np
 import trimesh
 
+from ..utils.config import Config
 from ..losses.base import CandidateScorer, LossSession
 from ..placement import Placement
 
@@ -62,8 +62,11 @@ class Selection(ABC):
         pass
 
 
-@dataclass(frozen=True)
-class ScoreAll(Selection):
+class ScoreAll(Config, Selection):
+    """Score every candidate with the fitting loss."""
+
+    type: Literal["score_all"] = "score_all"
+
     def start(self, target, session):
         return _ScoreAllSelector(session)
 

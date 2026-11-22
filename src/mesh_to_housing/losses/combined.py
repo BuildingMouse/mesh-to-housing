@@ -1,53 +1,49 @@
-from dataclasses import dataclass
-from math import isfinite, isnan
+from math import isnan
 from numbers import Real
-from types import MappingProxyType
-from typing import Mapping
+from typing import Literal
 
 import numpy as np
+from pydantic import field_validator
 
-from .base import CandidateScorer, Loss, LossConfig, LossSession
-
-
-@dataclass(frozen=True)
-class LossTerm:
-    config: LossConfig
-    weight: float = 1.0
-
-    def __post_init__(self):
-        weight = float(self.weight)
-        if not isfinite(weight) or weight < 0:
-            raise ValueError("weight must be finite and nonnegative")
-        object.__setattr__(self, "weight", weight)
+from ..utils.config import Config
+from ..utils.values import NonNegativeFloat
+from .base import CandidateScorer, Loss, LossConfig, LossSession, implements
 
 
-@dataclass(frozen=True)
+class LossTerm(Config):
+    loss: "LossConfigs"
+    loss_scale: NonNegativeFloat
+
+
 class CombinedLossConfig(LossConfig):
-    terms: Mapping[str, LossTerm]
+    """Named loss terms, summed after each is multiplied by its loss scale."""
 
-    def __post_init__(self):
-        terms = {name: term for name, term in self.terms.items() if term.weight > 0}
+    type: Literal["combined"] = "combined"
+    terms: dict[str, LossTerm]
+
+    @field_validator("terms")
+    @classmethod
+    def _positive_terms(cls, terms):
+        terms = {name: term for name, term in terms.items() if term.loss_scale > 0}
         if not terms:
-            raise ValueError("Choose at least one loss term with a positive weight")
-        object.__setattr__(self, "terms", MappingProxyType(terms))
-
-    def build(self):
-        return CombinedLoss(self)
+            raise ValueError("Choose at least one loss term with a positive loss_scale")
+        return terms
 
 
+@implements(CombinedLossConfig)
 class CombinedLoss(Loss):
-    """A weighted sum of individual losses."""
+    """A sum of individual losses, each multiplied by its loss scale."""
 
     def __init__(self, config):
         super().__init__(config)
-        self._terms = {name: (term.weight, term.config.build()) for name, term in config.terms.items()}
+        self._terms = {name: (term.loss_scale, Loss.from_config(term.loss)) for name, term in config.terms.items()}
 
     def __call__(self, target, construction):
         values = self.components(target, construction)
-        return sum(weight * values[name] for name, (weight, _) in self._terms.items())
+        return sum(scale * values[name] for name, (scale, _) in self._terms.items())
 
     def components(self, target, construction):
-        """Evaluate each term once, returning its unweighted value."""
+        """Evaluate each term once, returning its value before scaling."""
         values = {}
         for name, (_, loss) in self._terms.items():
             value = loss(target, construction)
@@ -60,18 +56,18 @@ class CombinedLoss(Loss):
         return values
 
     def session(self, target):
-        return _WeightedSession([(weight, loss.session(target)) for weight, loss in self._terms.values()])
+        return _ScaledSession([(scale, loss.session(target)) for scale, loss in self._terms.values()])
 
 
-class _WeightedSession(LossSession):
+class _ScaledSession(LossSession):
     def __init__(self, terms):
         self._terms = terms
 
     def value(self):
-        return sum(weight * session.value() for weight, session in self._terms)
+        return sum(scale * session.value() for scale, session in self._terms)
 
     def gain(self, placement):
-        return sum(weight * session.gain(placement) for weight, session in self._terms)
+        return sum(scale * session.gain(placement) for scale, session in self._terms)
 
     def add(self, placement):
         for _, session in self._terms:
@@ -82,15 +78,15 @@ class _WeightedSession(LossSession):
             session.remove(placement)
 
     def scorer(self, placements):
-        return _WeightedScorer([(weight, session.scorer(placements)) for weight, session in self._terms])
+        return _ScaledScorer([(scale, session.scorer(placements)) for scale, session in self._terms])
 
 
-class _WeightedScorer(CandidateScorer):
+class _ScaledScorer(CandidateScorer):
     def __init__(self, terms):
         self._terms = terms
 
     def gains(self):
         total = 0
-        for weight, scorer in self._terms:
-            total = total + weight * scorer.gains()
+        for scale, scorer in self._terms:
+            total = total + scale * scorer.gains()
         return total

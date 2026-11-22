@@ -1,17 +1,29 @@
 from abc import ABC, abstractmethod
-from typing import Sequence
+from typing import Callable, Sequence
 
 import numpy as np
 import trimesh
 
+from ..utils.config import Config
 from ..construction import Construction
 from ..placement import Placement
 
 
-class LossConfig(ABC):
-    @abstractmethod
-    def build(self) -> "Loss":
-        """Create the loss this config describes."""
+_IMPLEMENTATIONS: dict[type, type] = {}
+
+
+def implements(config_class: type) -> Callable[[type], type]:
+    """Register the decorated class as the loss to build from configs of config_class."""
+
+    def decorate(loss_class: type) -> type:
+        _IMPLEMENTATIONS[config_class] = loss_class
+        return loss_class
+
+    return decorate
+
+
+class LossConfig(Config):
+    """The settings of a loss. The loss class is registered separately, with implements."""
 
 
 class Loss(ABC):
@@ -19,6 +31,13 @@ class Loss(ABC):
 
     def __init__(self, config: LossConfig):
         self.config = config
+
+    @staticmethod
+    def from_config(config: LossConfig) -> "Loss":
+        """Build the loss registered for this config's class."""
+        if type(config) not in _IMPLEMENTATIONS:
+            raise TypeError(f"No loss is registered for {type(config).__name__}")
+        return _IMPLEMENTATIONS[type(config)](config)
 
     @abstractmethod
     def __call__(self, target: trimesh.Trimesh, construction: Construction) -> float:

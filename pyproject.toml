@@ -7,7 +7,7 @@ name = "mesh-to-housing"
 version = "0.1.0"
 description = "Mesh sparsification for spatial construction guides"
 requires-python = ">=3.9"
-dependencies = ["numpy>=1.24,<3", "trimesh>=4.6,<5", "pycollada>=0.8,<1"]
+dependencies = ["numpy>=1.24,<3", "trimesh>=4.6,<5", "pycollada>=0.8,<1", "pydantic>=2.6,<3", "pyyaml>=6,<7"]
 
 [project.optional-dependencies]
 formats = ["assimp-py>=1.1,<2"]

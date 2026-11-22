@@ -1,5 +1,6 @@
 from .pipeline.processor import MeshProcessor, SparseResult
 from .fitting import FittingAlgorithm, Greedy, Proposals, RandomPool, ResidualProposals, ScoreAll, Selection
+from .utils.config import Config, ConfigError
 from .construction import Construction
 from .utils.execution import Execution
 from .fit import fit
@@ -17,7 +18,7 @@ from .meshes.preparation import prepare_mesh, resize_mesh
 from .placement import Placement
 
 __all__ = [
-    "CandidateScorer", "CombinedLoss", "CombinedLossConfig", "Construction", "Cuboid", "FittingAlgorithm",
+    "CandidateScorer", "CombinedLoss", "CombinedLossConfig", "Config", "ConfigError", "Construction", "Cuboid", "FittingAlgorithm",
     "ExcessSurfaceConfig", "ExcessSurfaceLoss", "Execution", "FittingTask", "Greedy", "Item",
     "Loss", "LossConfig", "LossSession", "LossTerm", "MeshItem", "MeshLoader", "MeshProcessor", "OutsideVolumeConfig",
     "OutsideVolumeLoss", "Placement", "Proposals", "RandomPool", "ResidualProposals",

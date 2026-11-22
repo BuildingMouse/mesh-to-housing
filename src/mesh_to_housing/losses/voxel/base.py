@@ -1,17 +1,13 @@
-from dataclasses import dataclass, field
-
-from ...geometry.settings import SurfaceSettings
-from ...geometry.voxel_grid import VoxelGrid, VoxelGridConfig
+from ...geometry.settings import GridSettings, SurfaceSettings
+from ...geometry.voxel_grid import VoxelGrid
 from ..base import IncrementalLoss, LossConfig
 from ..cell_sessions import CoverageSession, PenaltySession
 
 
-@dataclass(frozen=True)
-class VoxelLossConfig(LossConfig):
-    grid: VoxelGridConfig = field(default_factory=VoxelGridConfig)
+class VoxelLossConfig(GridSettings, LossConfig):
+    pass
 
 
-@dataclass(frozen=True)
 class SurfaceToleranceConfig(SurfaceSettings, VoxelLossConfig):
     pass
 
