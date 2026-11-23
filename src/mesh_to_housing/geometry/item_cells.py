@@ -1,4 +1,5 @@
 """Which grid cells placements occupy."""
+from collections import Counter
 from typing import Iterator, Optional, Sequence
 from weakref import WeakKeyDictionary
 
@@ -32,15 +33,15 @@ class ItemCells:
 
     def occupied_by_each(self, placements: Sequence[Placement]) -> Iterator[CellKeys]:
         """The cells each placement occupies, worked out one placement at a time as they are read."""
-        patterns = _SharedPatterns(self)
         placements = list(placements)
+        patterns = _SharedPatterns(self, placements)
         self._sample_on_workers(placements, patterns)
         return (patterns.occupied(placement) for placement in placements)
 
     def skins_of_each(self, placements: Sequence[Placement]) -> Iterator[CellKeys]:
         """Each placement's skin, the outer layer of its cells, worked out one placement at a time as they are read."""
-        patterns = _SharedPatterns(self)
         placements = list(placements)
+        patterns = _SharedPatterns(self, placements)
         self._sample_on_workers(placements, patterns)
         return (patterns.skin(placement) for placement in placements)
 
@@ -49,8 +50,8 @@ class ItemCells:
         """Each placement's cells, or only its skin, grown by radius. Placements that share a pattern are grown
         once, and the rest in batches as they are read.
         """
-        patterns = _SharedPatterns(self)
         placements = list(placements)
+        patterns = _SharedPatterns(self, placements)
         self._sample_on_workers(placements, patterns)
         return self._dilated(placements, patterns, radius, skin_only)
 
@@ -80,16 +81,27 @@ class ItemCells:
 
 class _SharedPatterns:
     """Shared cell patterns for one batch of placements.
-    A placement sitting exactly on a cell center occupies the same cells wherever it is, just shifted. So we
-    sample one pattern per item, rotation and scale, and shift it into place.
+    Placements of the same item, rotation and scale that sit at the same spot within their cells occupy the same
+    cells, just shifted. So we sample one pattern for each such group and shift it into place. A placement on a
+    cell center always uses a pattern, and one elsewhere uses a pattern only when another placement in the batch
+    shares it.
     """
 
-    def __init__(self, cells: ItemCells):
+    def __init__(self, cells: ItemCells, placements: Sequence[Placement]):
         self._cells = cells
         self._grid = cells._grid
         self._occupied_patterns = {}
         self._skin_patterns = {}
         self._dilated_patterns = {}
+        self._found = {}
+        if placements:
+            keys, spots = _cells_and_spots(self._grid, np.array([placement.center for placement in placements]))
+            found = [(int(key), (placement.item, placement.rotation.tobytes(), placement.scale, spot.tobytes()))
+                     for placement, key, spot in zip(placements, keys, spots)]
+            sharing = Counter(pattern for _, pattern in found)
+            centered = ~spots.any(axis=1)
+            self._found = {placement: where for placement, where, on_center in zip(placements, found, centered)
+                           if on_center or sharing[where[1]] > 1}
 
     def occupied(self, placement: Placement) -> CellKeys:
         found = self.cell_and_pattern_key(placement)
@@ -118,18 +130,23 @@ class _SharedPatterns:
 
     def _occupied_pattern(self, pattern: tuple, placement: Placement) -> CellKeys:
         if pattern not in self._occupied_patterns:
-            self._occupied_patterns[pattern] = _pattern_at_origin(self._grid, placement)
+            self._occupied_patterns[pattern] = _pattern_at(self._grid, placement, np.frombuffer(pattern[3]))
         return self._occupied_patterns[pattern]
 
     def cell_and_pattern_key(self, placement: Placement) -> Optional[tuple[int, tuple]]:
-        """Returns the key of the cell the placement sits on and a key for its pattern, or None if it's off
-        center.
-        """
-        position = (placement.center - self._grid.origin) / self._grid.pitch
-        cell = np.round(position)
-        if np.any(np.abs(position - cell) > 1e-9):
-            return None
-        return cell_keys(cell)[0], (placement.item, placement.rotation.tobytes(), placement.scale)
+        """The key of the cell the placement falls in and a key for its pattern, or None if it has no pattern."""
+        return self._found.get(placement)
+
+
+def _cells_and_spots(grid: "VoxelGrid", centers: np.ndarray) -> tuple[CellKeys, np.ndarray]:
+    """The nearest cell to each center, and where the center sits relative to that cell's center, in cells.
+    Spots are rounded, so that placements on one lattice get equal spots despite rounding errors.
+    """
+    position = (centers - grid.origin) / grid.pitch
+    cells = np.round(position)
+    spots = np.round(position - cells, 12)
+    spots[np.abs(spots) <= 1e-9] = 0.0
+    return cell_keys(cells), spots
 
 
 def sample_occupied(grid: "VoxelGrid", placement: Placement) -> CellKeys:
@@ -150,9 +167,10 @@ def sample_occupied(grid: "VoxelGrid", placement: Placement) -> CellKeys:
     return cell_keys(indices[inside])
 
 
-def _pattern_at_origin(grid, placement):
-    at_origin = Placement(placement.item, grid.origin, placement.rotation, placement.scale)
-    return sample_occupied(grid, at_origin) - cell_keys(np.zeros(3))[0]
+def _pattern_at(grid, placement, spot):
+    """The placement's cells when it sits at this spot of the cell at the grid's origin, as offset keys."""
+    moved = Placement(placement.item, grid.origin + spot * grid.pitch, placement.rotation, placement.scale)
+    return sample_occupied(grid, moved) - cell_keys(np.zeros(3))[0]
 
 
 def _world_bounds(placement):
