@@ -23,8 +23,8 @@ def voxelize(mesh: trimesh.Trimesh, config: VoxelGridConfig) -> VoxelGrid:
     padding = closing + samples
     if np.prod(np.ceil(mesh.extents / fine_pitch) + 2 * padding + 5) > config.max_cells:
         raise ValueError("Voxel grid is too large; increase voxel_pitch or max_cells")
-    voxels = mesh.voxelized(fine_pitch)
-    surface = np.pad(voxels.matrix, padding)
+    shell, corner = _surface_voxels(mesh, fine_pitch)
+    surface = np.pad(shell, padding)
     if closing:
         surface = binary_closing(surface, iterations=closing)
     solid = binary_fill_holes(surface)
@@ -36,8 +36,30 @@ def voxelize(mesh: trimesh.Trimesh, config: VoxelGridConfig) -> VoxelGrid:
     thin_amount = _cell_blocks(solid, samples).sum(axis=(1, 3, 5)) * ~_cell_blocks(thick, samples).any(axis=(1, 3, 5))
     holds_thin_part = (thin_amount > 0) & (2 * thin_amount >= maximum_filter(thin_amount, size=3))
     indices = np.argwhere(half_filled | holds_thin_part)
-    origin = voxels.transform[:3, 3] + ((samples - 1) / 2 - padding) * fine_pitch
+    origin = corner + ((samples - 1) / 2 - padding) * fine_pitch
     return VoxelGrid(indices, fine_pitch * samples, origin, config)
+
+
+def _surface_voxels(mesh: trimesh.Trimesh, pitch: float, triangles_per_batch: int = 1 << 18):
+    """The voxels the surface passes through, as a boolean array, and the position of its first voxel.
+    Faces are split a batch at a time, so memory peak stays small at fine pitches.
+    """
+    from trimesh.remesh import subdivide_to_size
+
+    max_edge = pitch / 2
+    corners = mesh.triangles
+    low = np.round(corners.reshape(-1, 3).min(axis=0) / pitch).astype(int)
+    high = np.round(corners.reshape(-1, 3).max(axis=0) / pitch).astype(int)
+    shell = np.zeros(high - low + 1, dtype=bool)
+    longest = np.linalg.norm(corners - np.roll(corners, 1, axis=1), axis=2).max(axis=1)
+    # Each split turns a face into four, so this is about how many triangles each face ends as.
+    triangles = 4.0 ** np.ceil(np.log2(np.maximum(longest / max_edge, 1.0)))
+    batch = np.cumsum(triangles) // triangles_per_batch
+    for faces in np.split(mesh.faces, np.flatnonzero(np.diff(batch)) + 1):
+        used, local = np.unique(faces, return_inverse=True)
+        vertices, _ = subdivide_to_size(mesh.vertices[used], local.reshape(-1, 3), max_edge=max_edge, max_iter=10)
+        shell[tuple((np.round(vertices / pitch).astype(int) - low).T)] = True
+    return shell, low * pitch
 
 
 def _cell_blocks(fine: np.ndarray, samples: int) -> np.ndarray:
