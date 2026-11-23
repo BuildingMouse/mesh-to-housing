@@ -1,8 +1,9 @@
 import numpy as np
 
-from mesh_to_housing.geometry import morphology
 from mesh_to_housing.geometry.cells import CellHolders, cell_indices, cell_keys, key_offsets
 from mesh_to_housing.geometry.morphology import dilate_each
+
+from ..reference import as_cells, expanded
 
 CELLS = np.array([[-4000, 9, -11], [-4000, 9, 12], [0, -1, 0], [0, 0, 0], [4000, 500, 3]])
 
@@ -32,10 +33,9 @@ def test_cell_holders_of_no_cells_count_nothing():
     np.testing.assert_array_equal(holders.counts(cell_keys(CELLS)), [0, 0, 0])
 
 
-def test_dilation_in_groups_matches_one_pass(monkeypatch):
+def test_dilation_reaches_every_cell_within_the_radius():
     rng = np.random.default_rng(5)
     lists = [np.unique(cell_keys(rng.integers(-4, 4, (int(size), 3)))) for size in rng.integers(1, 20, 12)]
-    whole = dilate_each(lists, 1.0, 1.5)
-    monkeypatch.setattr(morphology, "_GROWN_PER_GROUP", 50)
-    for grouped, expected in zip(dilate_each(lists, 1.0, 1.5), whole):
-        np.testing.assert_array_equal(grouped, expected)
+    for keys, grown in zip(lists, dilate_each(lists, 1.0, 1.5)):
+        assert np.all(np.diff(grown) > 0)
+        assert as_cells(grown) == expanded(as_cells(keys), 1.0, 1.5)

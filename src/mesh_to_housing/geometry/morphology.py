@@ -5,9 +5,8 @@ from typing import Sequence
 import numpy as np
 
 from ..utils.execution import map_chunks
-from .cells import CellBox, CellKeys, key_offsets
+from .cells import CellKeys, key_offsets
 
-_GROWN_PER_GROUP = 1 << 24
 _FACES = key_offsets(np.vstack((np.eye(3, dtype=int), -np.eye(3, dtype=int))))
 
 
@@ -30,43 +29,20 @@ def skin_keys(keys: CellKeys) -> CellKeys:
     return keys[~enclosed]
 
 
+def ball_keys(pitch: float, radius: float) -> CellKeys:
+    """Key offsets of the cells whose centers lie within radius of a cell's center."""
+    reach = ceil(radius / pitch)
+    return key_offsets(np.argwhere(ball_mask(pitch, radius)) - reach)
+
+
 def dilate_each(key_lists: Sequence[CellKeys], pitch: float, radius: float) -> list[CellKeys]:
-    """For each sorted list, the sorted keys of every cell whose center lies within radius of one of its cells."""
+    """For each sorted list, the sorted keys of every cell whose center lies within radius of one of its cells.
+    Lists are grown one at a time, so memory never exceeds what the largest list needs.
+    """
     if radius < pitch:
         return list(key_lists)
-    return map_chunks(_dilate_chunk, key_lists, pitch, radius)
+    return map_chunks(_dilate_chunk, key_lists, ball_keys(pitch, radius))
 
 
-def _dilate_chunk(key_lists, pitch, radius):
-    """Grows the lists a group at a time, so each pass stays within a fixed amount of memory."""
-    offsets = int(ball_mask(pitch, radius).sum())
-    grown, group, size = [], [], 0
-    for keys in key_lists:
-        if group and (size + len(keys)) * offsets > _GROWN_PER_GROUP:
-            grown += _split_by_list(*_dilate_all(group, pitch, radius), len(group))
-            group, size = [], 0
-        group.append(keys)
-        size += len(keys)
-    if group:
-        grown += _split_by_list(*_dilate_all(group, pitch, radius), len(group))
-    return grown
-
-
-def _dilate_all(key_lists, pitch, radius):
-    """The grown keys of all lists in sorted order, and the index of the list each key belongs to."""
-    reach = ceil(radius / pitch)
-    offsets = np.argwhere(ball_mask(pitch, radius)) - reach
-    counts = [len(keys) for keys in key_lists]
-    if not sum(counts):
-        return np.zeros(0, dtype=np.int64), np.zeros(0, dtype=np.int64)
-    keys = np.concatenate(key_lists)
-    around = CellBox.around(keys)
-    box = CellBox(around.low - reach, around.low + around.shape - 1 + reach)
-    steps = (offsets[:, 0] * box.shape[1] + offsets[:, 1]) * box.shape[2] + offsets[:, 2]
-    owners = np.repeat(np.arange(len(key_lists), dtype=np.int64), counts)
-    numbered = np.unique((steps[:, None] + (owners * box.size + box.numbers(keys))[None, :]).ravel())
-    return box.keys(numbered % box.size), numbered // box.size
-
-
-def _split_by_list(values, owners, count):
-    return np.split(values, np.searchsorted(owners, np.arange(1, count)))
+def _dilate_chunk(key_lists, steps):
+    return [np.unique((keys[None, :] + steps[:, None]).ravel()) for keys in key_lists]

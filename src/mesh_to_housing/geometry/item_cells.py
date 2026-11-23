@@ -7,8 +7,11 @@ import numpy as np
 
 from ..utils.execution import map_chunks, share, worker_count
 from ..placement import Placement
-from .cells import CellKeys, batches, cell_keys
+from .cells import CellKeys, batches, cell_keys, select_keys
 from .morphology import dilate_each, skin_keys
+
+
+_KEYS_PER_LOOKUP = 1 << 20
 
 
 class ItemCells:
@@ -45,27 +48,41 @@ class ItemCells:
         self._sample_on_workers(placements, patterns)
         return (patterns.skin(placement) for placement in placements)
 
-    def dilated_each(self, placements: Sequence[Placement], radius: float, *,
-                     skin_only: bool = False) -> Iterator[CellKeys]:
-        """Each placement's cells, or only its skin, grown by radius. Placements that share a pattern are grown
-        once, and the rest in batches as they are read.
-        """
+    def reach_each(self, placements: Sequence[Placement], radius: float, region: "TargetSurface", *,
+                   skin_only: bool = False) -> Iterator[CellKeys]:
+        """For each placement, the cells of the region within radius of its cells, or of only its skin."""
         placements = list(placements)
         patterns = _SharedPatterns(self, placements)
         self._sample_on_workers(placements, patterns)
-        return self._dilated(placements, patterns, radius, skin_only)
+        return self._reached(placements, patterns, radius, region, skin_only)
 
-    def _dilated(self, placements, patterns, radius, skin_only):
+    def _reached(self, placements, patterns, radius, region, skin_only):
         for batch in batches(placements, 4096):
-            found = [patterns.cell_and_pattern_key(placement) for placement in batch]
-            off_center = [patterns.skin(placement) if skin_only else patterns.occupied(placement)
-                          for placement, where in zip(batch, found) if where is None]
-            grown = iter(dilate_each(off_center, self._grid.pitch, radius))
-            for placement, where in zip(batch, found):
-                if where is None:
-                    yield next(grown)
+            reached = [None] * len(batch)
+            groups, alone = {}, []
+            for index, placement in enumerate(batch):
+                found = patterns.cell_and_pattern_key(placement)
+                if found is None:
+                    alone.append(index)
                 else:
-                    yield where[0] + patterns.dilated(where, placement, radius, skin_only)
+                    groups.setdefault(found[1], []).append((index, found[0]))
+            # Cells too far from the region can't reach it, so they are dropped before growing.
+            sources = select_keys((patterns.skin(batch[index]) if skin_only else patterns.occupied(batch[index])
+                                   for index in alone), lambda keys: region.near(keys, radius))
+            grown = dilate_each(list(sources), self._grid.pitch, radius)
+            for index, keys in zip(alone, select_keys(grown, region.contains)):
+                reached[index] = keys
+            for members in groups.values():
+                index, cell = members[0]
+                offsets = patterns.dilated(batch[index], cell, radius, skin_only)
+                rows = max(1, _KEYS_PER_LOOKUP // max(len(offsets), 1))
+                for start in range(0, len(members), rows):
+                    block = members[start:start + rows]
+                    keys = np.array([cell for _, cell in block], dtype=np.int64)[:, None] + offsets[None, :]
+                    inside = region.contains(keys.ravel()).reshape(keys.shape)
+                    for row, (index, _) in enumerate(block):
+                        reached[index] = keys[row][inside[row]]
+            yield from reached
 
     def _sample_on_workers(self, placements: list[Placement], patterns: "_SharedPatterns") -> None:
         if worker_count() <= 1:
@@ -119,12 +136,11 @@ class _SharedPatterns:
             self._skin_patterns[pattern] = skin_keys(self._occupied_pattern(pattern, placement))
         return cell + self._skin_patterns[pattern]
 
-    def dilated(self, found: tuple[int, tuple], placement: Placement, radius: float, skin_only: bool) -> CellKeys:
-        cell, pattern = found
-        key = (pattern, radius, skin_only)
+    def dilated(self, placement: Placement, cell: int, radius: float, skin_only: bool) -> CellKeys:
+        """The placement's pattern, or its skin pattern, grown by radius, as offsets from its cell."""
+        key = (self._found[placement][1], radius, skin_only)
         if key not in self._dilated_patterns:
             keys = self.skin(placement) if skin_only else self.occupied(placement)
-            # Pattern keys are offsets, which don't decode as cells, so grow the placed copy and shift it back.
             self._dilated_patterns[key] = dilate_each([keys], self._grid.pitch, radius)[0] - cell
         return self._dilated_patterns[key]
 
