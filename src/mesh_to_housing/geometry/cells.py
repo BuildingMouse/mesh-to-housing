@@ -1,5 +1,6 @@
 """Grid cells packed into single integer keys, so that a set of cells can be a sorted integer array."""
-from typing import Callable, Sequence
+from itertools import islice
+from typing import Callable, Iterable, Iterator, Optional
 
 import numpy as np
 
@@ -35,14 +36,21 @@ def contains_sorted(sorted_keys: CellKeys, keys: CellKeys) -> np.ndarray:
     return sorted_keys[position] == keys
 
 
-def select_keys(key_lists: Sequence[CellKeys], keep: Callable[[CellKeys], np.ndarray]) -> list[CellKeys]:
-    """Each list with only the keys where keep(keys) is true. keep is called once for all lists together."""
-    if not len(key_lists):
-        return []
-    keys = np.concatenate(key_lists)
-    kept = keep(keys)
-    ends = np.cumsum([len(listed) for listed in key_lists])[:-1]
-    return np.split(keys[kept], np.concatenate(([0], np.cumsum(kept)))[ends])
+def batches(values: Iterable, size: int) -> Iterator[list]:
+    """The values in lists of up to size, in order."""
+    values = iter(values)
+    while batch := list(islice(values, size)):
+        yield batch
+
+
+def select_keys(key_lists: Iterable[CellKeys], keep: Callable[[CellKeys], np.ndarray],
+                batch: int = 4096) -> Iterator[CellKeys]:
+    """Each list with only the keys where keep(keys) is true. keep is called once per batch of lists."""
+    for lists in batches(key_lists, batch):
+        keys = np.concatenate(lists)
+        kept = keep(keys)
+        ends = np.cumsum([len(listed) for listed in lists])[:-1]
+        yield from np.split(keys[kept], np.concatenate(([0], np.cumsum(kept)))[ends])
 
 
 class CellBox:
@@ -78,17 +86,60 @@ class CellBox:
         return found
 
 
-def candidate_matrix(key_lists: Sequence[CellKeys]):
-    """A sparse matrix with one row per list of keys and one column per cell of a box around all of them,
-    returned with that box. Both are None when the lists are empty.
+class CellHolders:
+    """Which candidates hold each cell, over a box around all their cells.
+    It reads the candidates a chunk at a time, so it never holds more than one compact copy of their cells.
     """
-    from scipy.sparse import csr_matrix
 
-    keys = np.concatenate(key_lists) if len(key_lists) else np.zeros(0, dtype=np.int64)
-    if not len(keys):
-        return None, None
-    box = CellBox.around(keys)
-    rows = np.repeat(np.arange(len(key_lists)), [len(listed) for listed in key_lists])
-    matrix = csr_matrix((np.ones(len(keys), dtype=np.int32), (rows, box.numbers(keys))),
-                        shape=(len(key_lists), box.size))
-    return box, matrix
+    def __init__(self, key_lists: Iterable[CellKeys], count: int, chunk: int = 4096):
+        self.count = count
+        self.lengths = np.zeros(count, dtype=np.int64)
+        self.box: Optional[CellBox] = None
+        chunks, low, high = [], None, None
+        for start, lists in zip(range(0, count, chunk), batches(key_lists, chunk)):
+            self.lengths[start:start + len(lists)] = [len(keys) for keys in lists]
+            keys = np.concatenate(lists)
+            if len(keys):
+                indices = cell_indices(keys)
+                low = indices.min(axis=0) if low is None else np.minimum(low, indices.min(axis=0))
+                high = indices.max(axis=0) if high is None else np.maximum(high, indices.max(axis=0))
+            chunks.append(keys)
+        if low is None:
+            return
+        self.box = CellBox(low, high)
+        per_cell = np.zeros(self.box.size, dtype=np.int64)
+        for position, keys in enumerate(chunks):
+            chunks[position] = numbers = self.box.numbers(keys).astype(_index_type(self.box.size))
+            per_cell += np.bincount(numbers, minlength=self.box.size)
+        self._starts = np.concatenate(([0], np.cumsum(per_cell)))
+        del per_cell
+        self._holders = np.empty(int(self._starts[-1]), dtype=_index_type(count))
+        free = self._starts[:-1].copy()
+        for position, numbers in enumerate(chunks):
+            chunks[position] = None
+            if not len(numbers):
+                continue
+            lengths = self.lengths[position * chunk:(position + 1) * chunk]
+            holders = np.repeat(np.arange(position * chunk, position * chunk + len(lengths),
+                                          dtype=self._holders.dtype), lengths)
+            order = np.argsort(numbers)
+            numbers, holders = numbers[order], holders[order]
+            first = np.flatnonzero(np.r_[True, numbers[1:] != numbers[:-1]])
+            runs = np.diff(np.r_[first, len(numbers)])
+            self._holders[free[numbers] + np.arange(len(numbers)) - np.repeat(first, runs)] = holders
+            free[numbers[first]] += runs
+
+    def counts(self, keys: CellKeys) -> np.ndarray:
+        """How many of these distinct keys each candidate holds."""
+        if self.box is None:
+            return np.zeros(self.count, dtype=np.int64)
+        numbers = self.box.numbers(keys)
+        numbers = numbers[numbers >= 0]
+        starts = self._starts[numbers]
+        sizes = self._starts[numbers + 1] - starts
+        positions = np.repeat(starts - (np.cumsum(sizes) - sizes), sizes) + np.arange(sizes.sum())
+        return np.bincount(self._holders[positions], minlength=self.count)
+
+
+def _index_type(size: int):
+    return np.int32 if size < 2 ** 31 else np.int64

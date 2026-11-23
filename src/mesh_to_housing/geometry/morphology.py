@@ -7,6 +7,7 @@ import numpy as np
 from ..utils.execution import map_chunks
 from .cells import CellBox, CellKeys, key_offsets
 
+_GROWN_PER_GROUP = 1 << 24
 _FACES = key_offsets(np.vstack((np.eye(3, dtype=int), -np.eye(3, dtype=int))))
 
 
@@ -30,16 +31,25 @@ def skin_keys(keys: CellKeys) -> CellKeys:
 
 
 def dilate_each(key_lists: Sequence[CellKeys], pitch: float, radius: float) -> list[CellKeys]:
-    """For each list, the sorted keys of every cell whose center lies within radius of one of its cells.
-
-    All lists are grown in one pass.
-    """
+    """For each sorted list, the sorted keys of every cell whose center lies within radius of one of its cells."""
+    if radius < pitch:
+        return list(key_lists)
     return map_chunks(_dilate_chunk, key_lists, pitch, radius)
 
 
 def _dilate_chunk(key_lists, pitch, radius):
-    reached, owners = _dilate_all(key_lists, pitch, radius)
-    return _split_by_list(reached, owners, len(key_lists))
+    """Grows the lists a group at a time, so each pass stays within a fixed amount of memory."""
+    offsets = int(ball_mask(pitch, radius).sum())
+    grown, group, size = [], [], 0
+    for keys in key_lists:
+        if group and (size + len(keys)) * offsets > _GROWN_PER_GROUP:
+            grown += _split_by_list(*_dilate_all(group, pitch, radius), len(group))
+            group, size = [], 0
+        group.append(keys)
+        size += len(keys)
+    if group:
+        grown += _split_by_list(*_dilate_all(group, pitch, radius), len(group))
+    return grown
 
 
 def _dilate_all(key_lists, pitch, radius):

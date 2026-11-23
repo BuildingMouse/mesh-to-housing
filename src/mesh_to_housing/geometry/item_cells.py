@@ -1,13 +1,13 @@
 """Which grid cells placements occupy."""
-from typing import Optional, Sequence
+from typing import Iterator, Optional, Sequence
 from weakref import WeakKeyDictionary
 
 import numpy as np
 
 from ..utils.execution import map_chunks, share, worker_count
 from ..placement import Placement
-from .cells import CellKeys, cell_keys
-from .morphology import skin_keys
+from .cells import CellKeys, batches, cell_keys
+from .morphology import dilate_each, skin_keys
 
 
 class ItemCells:
@@ -30,19 +30,41 @@ class ItemCells:
             keys = self._skins[placement] = skin_keys(self._sampled(placement))
         return keys
 
-    def occupied_by_each(self, placements: Sequence[Placement]) -> list[CellKeys]:
-        """Returns the cells each placement occupies."""
+    def occupied_by_each(self, placements: Sequence[Placement]) -> Iterator[CellKeys]:
+        """The cells each placement occupies, worked out one placement at a time as they are read."""
         patterns = _SharedPatterns(self)
         placements = list(placements)
         self._sample_on_workers(placements, patterns)
-        return [patterns.occupied(placement) for placement in placements]
+        return (patterns.occupied(placement) for placement in placements)
 
-    def skins_of_each(self, placements: Sequence[Placement]) -> list[CellKeys]:
-        """Returns each placement's skin: the outer layer of its cells."""
+    def skins_of_each(self, placements: Sequence[Placement]) -> Iterator[CellKeys]:
+        """Each placement's skin, the outer layer of its cells, worked out one placement at a time as they are read."""
         patterns = _SharedPatterns(self)
         placements = list(placements)
         self._sample_on_workers(placements, patterns)
-        return [patterns.skin(placement) for placement in placements]
+        return (patterns.skin(placement) for placement in placements)
+
+    def dilated_each(self, placements: Sequence[Placement], radius: float, *,
+                     skin_only: bool = False) -> Iterator[CellKeys]:
+        """Each placement's cells, or only its skin, grown by radius. Placements that share a pattern are grown
+        once, and the rest in batches as they are read.
+        """
+        patterns = _SharedPatterns(self)
+        placements = list(placements)
+        self._sample_on_workers(placements, patterns)
+        return self._dilated(placements, patterns, radius, skin_only)
+
+    def _dilated(self, placements, patterns, radius, skin_only):
+        for batch in batches(placements, 4096):
+            found = [patterns.cell_and_pattern_key(placement) for placement in batch]
+            off_center = [patterns.skin(placement) if skin_only else patterns.occupied(placement)
+                          for placement, where in zip(batch, found) if where is None]
+            grown = iter(dilate_each(off_center, self._grid.pitch, radius))
+            for placement, where in zip(batch, found):
+                if where is None:
+                    yield next(grown)
+                else:
+                    yield where[0] + patterns.dilated(where, placement, radius, skin_only)
 
     def _sample_on_workers(self, placements: list[Placement], patterns: "_SharedPatterns") -> None:
         if worker_count() <= 1:
@@ -67,6 +89,7 @@ class _SharedPatterns:
         self._grid = cells._grid
         self._occupied_patterns = {}
         self._skin_patterns = {}
+        self._dilated_patterns = {}
 
     def occupied(self, placement: Placement) -> CellKeys:
         found = self.cell_and_pattern_key(placement)
@@ -83,6 +106,15 @@ class _SharedPatterns:
         if pattern not in self._skin_patterns:
             self._skin_patterns[pattern] = skin_keys(self._occupied_pattern(pattern, placement))
         return cell + self._skin_patterns[pattern]
+
+    def dilated(self, found: tuple[int, tuple], placement: Placement, radius: float, skin_only: bool) -> CellKeys:
+        cell, pattern = found
+        key = (pattern, radius, skin_only)
+        if key not in self._dilated_patterns:
+            keys = self.skin(placement) if skin_only else self.occupied(placement)
+            # Pattern keys are offsets, which don't decode as cells, so grow the placed copy and shift it back.
+            self._dilated_patterns[key] = dilate_each([keys], self._grid.pitch, radius)[0] - cell
+        return self._dilated_patterns[key]
 
     def _occupied_pattern(self, pattern: tuple, placement: Placement) -> CellKeys:
         if pattern not in self._occupied_patterns:
