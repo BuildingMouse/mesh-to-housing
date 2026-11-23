@@ -69,20 +69,28 @@ class VoxelGrid:
 
     def outside_distance(self, keys: CellKeys) -> np.ndarray:
         """How far each cell is from the nearest target cell, in target units. Target cells are at 0."""
-        distances_in_box, box = self._outside_field
+        squared_in_box, box = self._outside_field
         numbers = box.numbers(keys)
         distances = np.empty(len(numbers))
         inside = numbers >= 0
-        distances[inside] = distances_in_box.ravel()[numbers[inside]]
+        distances[inside] = np.sqrt(squared_in_box.ravel()[numbers[inside]]) * self.pitch
         if not inside.all():
             distances[~inside] = self._target_tree.query(cell_indices(keys[~inside]))[0] * self.pitch
         return distances
 
     def outward_normals(self, indices: np.ndarray) -> np.ndarray:
-        """Outward unit normals at the given cells, from the gradient of a slightly blurred copy of the solid."""
-        gradient, low = self._solid_gradient
-        local = tuple((np.asarray(indices, dtype=int).reshape(-1, 3) - low).T)
-        normals = -np.stack([component[local] for component in gradient], axis=1)
+        """Outward unit normals at the given target cells"""
+        from scipy.ndimage import gaussian_filter
+
+        low = self.indices.min(axis=0) - 2
+        solid = np.zeros(self.indices.max(axis=0) - low + 3)
+        solid[tuple((self.indices - low).T)] = 1.0
+        blurred = gaussian_filter(solid, sigma=1.0)
+        del solid
+        local = np.asarray(indices, dtype=int).reshape(-1, 3) - low
+        # The central differences np.gradient takes, only at these cells; the padding keeps them off the edges.
+        normals = -np.stack([(blurred[tuple((local + step).T)] - blurred[tuple((local - step).T)]) / 2.0
+                             for step in np.eye(3, dtype=int)], axis=1)
         lengths = np.linalg.norm(normals, axis=1, keepdims=True)
         return np.where(lengths > 0, normals / np.where(lengths > 0, lengths, 1), (0.0, 0.0, 1.0))
 
@@ -100,24 +108,27 @@ class VoxelGrid:
 
     @cached_property
     def _outside_field(self) -> tuple[np.ndarray, CellBox]:
+        """Squared distances, in cells, from each cell of a padded box to the nearest target cell.
+        Squares of whole cell offsets are exact integers, so their square roots match a float distance transform.
+        """
         from scipy.ndimage import distance_transform_edt
 
         padding = 32
-        solid = np.pad(self.solid_mask, padding)
+        outside = ~np.pad(self.solid_mask, padding)
+        nearest = distance_transform_edt(outside, return_distances=False, return_indices=True)
+        del outside
+        squared = np.zeros(nearest.shape[1:], dtype=np.int32)
+        for axis, offsets in enumerate(nearest):
+            shape = [1, 1, 1]
+            shape[axis] = -1
+            offsets -= np.arange(offsets.shape[axis], dtype=offsets.dtype).reshape(shape)
+            offsets *= offsets
+            squared += offsets
         low = self.box.low - padding
-        return distance_transform_edt(~solid) * self.pitch, CellBox(low, low + np.array(solid.shape) - 1)
+        return squared, CellBox(low, low + np.array(squared.shape) - 1)
 
     @cached_property
     def _target_tree(self):
         from scipy.spatial import cKDTree
 
         return cKDTree(self.indices)
-
-    @cached_property
-    def _solid_gradient(self) -> tuple[list[np.ndarray], np.ndarray]:
-        from scipy.ndimage import gaussian_filter
-
-        low = self.indices.min(axis=0) - 2
-        solid = np.zeros(self.indices.max(axis=0) - low + 3)
-        solid[tuple((self.indices - low).T)] = 1.0
-        return np.gradient(gaussian_filter(solid, sigma=1.0)), low

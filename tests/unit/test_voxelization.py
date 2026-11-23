@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 import trimesh
 
+from mesh_to_housing.geometry.cells import cell_keys
 from mesh_to_housing.geometry.voxelization import _surface_voxels
 
 
@@ -14,3 +15,10 @@ def test_surface_voxels_in_batches_match_trimesh(mesh):
     shell, corner = _surface_voxels(mesh, pitch, triangles_per_batch=64)
     np.testing.assert_array_equal(shell, expected.matrix)
     np.testing.assert_array_equal(corner, expected.transform[:3, 3])
+
+
+def test_outside_distance_matches_the_nearest_target_cell(grid):
+    rng = np.random.default_rng(2)
+    cells = rng.integers(grid.box.low - 45, grid.box.low + grid.box.shape + 45, (500, 3))
+    nearest = np.linalg.norm(cells[:, None, :] - grid.indices[None, :, :], axis=2).min(axis=1)
+    np.testing.assert_allclose(grid.outside_distance(cell_keys(cells)), nearest * grid.pitch, rtol=0, atol=1e-12)
