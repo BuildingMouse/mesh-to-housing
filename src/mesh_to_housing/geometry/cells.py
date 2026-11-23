@@ -43,10 +43,23 @@ def batches(values: Iterable, size: int) -> Iterator[list]:
         yield batch
 
 
+def key_batches(key_lists: Iterable[CellKeys], size: int) -> Iterator[list[CellKeys]]:
+    """The lists in batches of at most size keys, in order. A list longer than size makes a batch of its own."""
+    batch, held = [], 0
+    for keys in key_lists:
+        if batch and held + len(keys) > size:
+            yield batch
+            batch, held = [], 0
+        batch.append(keys)
+        held += len(keys)
+    if batch:
+        yield batch
+
+
 def select_keys(key_lists: Iterable[CellKeys], keep: Callable[[CellKeys], np.ndarray],
-                batch: int = 4096) -> Iterator[CellKeys]:
-    """Each list with only the keys where keep(keys) is true. keep is called once per batch of lists."""
-    for lists in batches(key_lists, batch):
+                size: int = 1 << 20) -> Iterator[CellKeys]:
+    """Each list with only the keys where keep(keys) is true. keep is called once per batch of about size keys."""
+    for lists in key_batches(key_lists, size):
         keys = np.concatenate(lists)
         kept = keep(keys)
         ends = np.cumsum([len(listed) for listed in lists])[:-1]
@@ -77,6 +90,12 @@ class CellBox:
         """The keys of the cells with these numbers."""
         return cell_keys(np.stack(np.unravel_index(numbers, tuple(self.shape)), axis=1) + self.low)
 
+    def renumbered(self, numbers: np.ndarray, box: "CellBox") -> np.ndarray:
+        """The numbers that cells of this box have in a larger box that holds it."""
+        x, y, z = np.unravel_index(numbers, tuple(self.shape))
+        shift = self.low - box.low
+        return ((x + shift[0]) * box.shape[1] + y + shift[1]) * box.shape[2] + z + shift[2]
+
     def lookup(self, mask: np.ndarray, keys: CellKeys) -> np.ndarray:
         """Whether each cell is set in a boolean mask that covers this box."""
         numbers = self.numbers(keys)
@@ -88,40 +107,41 @@ class CellBox:
 
 class CellHolders:
     """Which candidates hold each cell, over a box around all their cells.
-    It reads the candidates a chunk at a time, so it never holds more than one compact copy of their cells.
+    It reads the candidates a chunk at a time and stores each chunk's cells as compact numbers within the chunk's
+    own box, so full keys only ever exist for one chunk.
     """
 
-    def __init__(self, key_lists: Iterable[CellKeys], count: int, chunk: int = 4096):
+    def __init__(self, key_lists: Iterable[CellKeys], count: int, keys_per_chunk: int = 1 << 20):
         self.count = count
         self.lengths = np.zeros(count, dtype=np.int64)
         self.box: Optional[CellBox] = None
-        chunks, low, high = [], None, None
-        for start, lists in zip(range(0, count, chunk), batches(key_lists, chunk)):
+        chunks, start, low, high = [], 0, None, None
+        for lists in key_batches(key_lists, keys_per_chunk):
             self.lengths[start:start + len(lists)] = [len(keys) for keys in lists]
             keys = np.concatenate(lists)
             if len(keys):
-                indices = cell_indices(keys)
-                low = indices.min(axis=0) if low is None else np.minimum(low, indices.min(axis=0))
-                high = indices.max(axis=0) if high is None else np.maximum(high, indices.max(axis=0))
-            chunks.append(keys)
+                box = CellBox.around(keys)
+                chunks.append((start, len(lists), box, box.numbers(keys).astype(_index_type(box.size))))
+                top = box.low + box.shape - 1
+                low = box.low if low is None else np.minimum(low, box.low)
+                high = top if high is None else np.maximum(high, top)
+            start += len(lists)
         if low is None:
             return
         self.box = CellBox(low, high)
         per_cell = np.zeros(self.box.size, dtype=np.int64)
-        for position, keys in enumerate(chunks):
-            chunks[position] = numbers = self.box.numbers(keys).astype(_index_type(self.box.size))
+        for position, (start, size, box, numbers) in enumerate(chunks):
+            numbers = box.renumbered(numbers, self.box).astype(_index_type(self.box.size))
+            chunks[position] = (start, size, numbers)
             per_cell += np.bincount(numbers, minlength=self.box.size)
         self._starts = np.concatenate(([0], np.cumsum(per_cell)))
         del per_cell
         self._holders = np.empty(int(self._starts[-1]), dtype=_index_type(count))
         free = self._starts[:-1].copy()
-        for position, numbers in enumerate(chunks):
+        for position, (start, size, numbers) in enumerate(chunks):
             chunks[position] = None
-            if not len(numbers):
-                continue
-            lengths = self.lengths[position * chunk:(position + 1) * chunk]
-            holders = np.repeat(np.arange(position * chunk, position * chunk + len(lengths),
-                                          dtype=self._holders.dtype), lengths)
+            holders = np.repeat(np.arange(start, start + size, dtype=self._holders.dtype),
+                                self.lengths[start:start + size])
             order = np.argsort(numbers)
             numbers, holders = numbers[order], holders[order]
             first = np.flatnonzero(np.r_[True, numbers[1:] != numbers[:-1]])
