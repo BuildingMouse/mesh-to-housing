@@ -1,13 +1,14 @@
 from abc import abstractmethod
-from typing import Callable, Sequence
+from typing import Callable, Iterable, Sequence
+from weakref import WeakKeyDictionary
 
 import numpy as np
 
-from ..geometry.cells import CellKeys, candidate_matrix
+from ..geometry.cells import CellHolders, CellKeys
 from ..placement import Placement
 from .base import CandidateScorer, LossSession
 
-CellsOf = Callable[[Sequence[Placement]], list[CellKeys]]
+CellsOf = Callable[[Sequence[Placement]], Iterable[CellKeys]]
 
 
 class CellCounts:
@@ -45,7 +46,8 @@ class CellSession(LossSession):
         self._cells_of = cells_of
         self._reference = reference
         self._scored = CellCounts()
-        self._cells_by_placement = {}
+        # Weak, so candidates that were only scored don't stay alive.
+        self._cells_by_placement = WeakKeyDictionary()
 
     def add(self, placement):
         self._scored.add(self._cells(placement))
@@ -63,7 +65,7 @@ class CellSession(LossSession):
     def _cells(self, placement):
         cells = self._cells_by_placement.get(placement)
         if cells is None:
-            cells = self._cells_by_placement[placement] = self._cells_of([placement])[0]
+            cells = self._cells_by_placement[placement] = next(iter(self._cells_of([placement])))
         return cells
 
     def _new_count(self, placement):
@@ -104,28 +106,15 @@ class _CellScorer(CandidateScorer):
 
     def __init__(self, session: CellSession, placements: Sequence[Placement]):
         self._session = session
-        cells = session._cells_of(placements) if placements else []
-        self._box, matrix = candidate_matrix(cells)
-        if self._box is None:
-            self._new_counts = np.zeros(len(cells), dtype=np.int64)
-            return
-        self._columns = matrix.tocsc()
-        unscored = np.ones(self._box.size, dtype=np.int64)
-        scored = self._box.numbers(session._scored.keys)
-        unscored[scored[scored >= 0]] = 0
-        self._new_counts = matrix @ unscored
+        self._holders = CellHolders(session._cells_of(placements), len(placements))
+        self._new_counts = self._holders.lengths - self._holders.counts(session._scored.keys)
         self._seen = len(session._scored.changes)
 
     def gains(self):
-        if self._box is not None:
-            changes = self._session._scored.changes
-            for keys, step in changes[self._seen:]:
-                numbers = self._box.numbers(keys)
-                numbers = numbers[numbers >= 0]
-                if len(numbers):
-                    changed = np.asarray(self._columns[:, numbers].sum(axis=1)).ravel()
-                    self._new_counts = self._new_counts - step * changed
-            self._seen = len(changes)
+        changes = self._session._scored.changes
+        for keys, step in changes[self._seen:]:
+            self._new_counts = self._new_counts - step * self._holders.counts(keys)
+        self._seen = len(changes)
         return self._session._gains(self._new_counts)
 
 

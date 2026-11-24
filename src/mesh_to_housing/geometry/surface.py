@@ -1,13 +1,16 @@
 from functools import cached_property
+from math import ceil
 
 import numpy as np
 
-from .cells import CellKeys, cell_indices, cell_keys
+from .cells import CellBox, CellKeys, cell_indices, cell_keys
+from .morphology import ball_mask
 
 
 class TargetSurface:
     def __init__(self, grid: "VoxelGrid"):
         self._grid = grid
+        self._near_masks = {}
 
     @cached_property
     def mask(self) -> np.ndarray:
@@ -30,6 +33,19 @@ class TargetSurface:
 
     def contains(self, keys: CellKeys) -> np.ndarray:
         return self._grid.box.lookup(self.mask, keys)
+
+    def near(self, keys: CellKeys, radius: float) -> np.ndarray:
+        """Whether each cell's center lies within radius of a surface cell's center."""
+        if radius not in self._near_masks:
+            from scipy.ndimage import binary_dilation
+
+            grid = self._grid
+            reach = ceil(radius / grid.pitch)
+            box = CellBox(grid.box.low - reach, grid.box.low + grid.box.shape - 1 + reach)
+            grown = binary_dilation(np.pad(self.mask, reach), structure=ball_mask(grid.pitch, radius))
+            self._near_masks[radius] = box, grown
+        box, grown = self._near_masks[radius]
+        return box.lookup(grown, keys)
 
     def index_of(self, keys: CellKeys) -> np.ndarray:
         """Where each of these surface cells sits in keys."""
