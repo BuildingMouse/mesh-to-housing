@@ -11,14 +11,12 @@ from mesh_to_housing import Cuboid, FittingPipeline, FittingTask, MeshLoader, Tr
 from .profiler import FitProfiler
 
 ROOT = Path(__file__).resolve().parents[2]
-_Y_UP_TO_Z_UP = np.array([[1, 0, 0, 0], [0, 0, -1, 0], [0, 1, 0, 0], [0, 0, 0, 1]], dtype=float)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("pipeline", nargs="?", default=ROOT / "pipelines/staged_refine.yaml", type=Path)
     parser.add_argument("--mesh", default=ROOT / "mesh-assets/dinosaur.dae", type=Path)
-    parser.add_argument("--y-up", action="store_true", help="the mesh has y up, like the prepared .ply models")
     parser.add_argument("--size", default=10.0, type=float, help="the target's longest side")
     parser.add_argument("--items", default=100, type=int, help="the item budget")
     parser.add_argument("--kinds", default=6, type=int,
@@ -38,8 +36,6 @@ def main() -> None:
     with FitProfiler(trace=not args.no_trace) as profiler:
         with profiler.part("load target"):
             mesh = MeshLoader.load(args.mesh)
-            if args.y_up:
-                mesh.apply_transform(_Y_UP_TO_Z_UP)
             task = FittingTask(resize_mesh(mesh, args.size), catalog(args.kinds), args.items,
                                TransformConstraints(scale_bounds=tuple(args.scales)))
         began = time.perf_counter()
