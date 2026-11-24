@@ -3,7 +3,7 @@ from typing import Optional
 from pydantic import Field
 
 from ..utils.config import Config
-from ..utils.values import NonNegativeFloat
+from ..utils.values import NonNegativeFloat, PositiveFloat
 from .voxel_grid import VoxelGrid, VoxelGridConfig
 
 
@@ -19,3 +19,12 @@ class SurfaceSettings(GridSettings):
 
     def tolerance_for(self, target):
         return float(target.extents.max() / 96 if self.surface_tolerance is None else self.surface_tolerance)
+
+
+class ThinnessSettings(GridSettings):
+    """A part counts as thin when it is narrower than twice thinness_radius, four cells unless set."""
+
+    thinness_radius: Optional[PositiveFloat] = None
+
+    def thinness_radius_for(self, grid: VoxelGrid) -> float:
+        return 4 * grid.pitch if self.thinness_radius is None else self.thinness_radius

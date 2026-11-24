@@ -68,3 +68,26 @@ def test_weighted_sessions_sum_the_weights_of_scored_cells(task, grid, placement
 
     session = (PenaltySession if penalty else CoverageSession)(cells_of, reference, weights=weight_of)
     follow(session, placements, counted, reference, penalty, weighed)
+
+
+@pytest.mark.parametrize("skin_only", [False, True])
+def test_uncovered_surface_weighs_cells_by_roughness_and_thinness(task, grid_config, grid, placements, skin_only):
+    tolerance = grid.pitch * 1.1
+    surface = skin(frozenset(map(tuple, grid.indices)))
+    roughness = grid.surface.roughness(2 * grid.pitch)
+    thinness = grid.surface.thinness(4 * grid.pitch)
+    assert thinness.max() > 0
+    weight = {tuple(cell): 1.0 + 4.0 * rough + 3.0 * thin
+              for cell, rough, thin in zip(grid.surface.indices.tolist(), roughness, thinness)}
+
+    def counted(placement):
+        occupied = sampled_cells(grid, placement)
+        return expanded(skin(occupied) if skin_only else occupied, grid.pitch, tolerance) & surface
+
+    def weighed(cells):
+        return sum(weight[cell] for cell in cells)
+
+    config = UncoveredSurfaceConfig(grid=grid_config, surface_tolerance=tolerance, skin_only=skin_only,
+                                    roughness_weight=4.0, thinness_weight=3.0)
+    session = Loss.from_config(config).session(task.target)
+    follow(session, placements, counted, sum(weight.values()), weigh=weighed)

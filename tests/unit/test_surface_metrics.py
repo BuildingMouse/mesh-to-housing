@@ -1,12 +1,15 @@
-"""Precision, recall, F-score, Chamfer and Hausdorff between the outer surfaces of the target and the construction."""
+"""Precision, recall, F-score, Chamfer, Hausdorff and excess roughness between the outer surfaces of the target
+and the construction.
+"""
 import numpy as np
 import pytest
 import trimesh
 from pydantic import ValidationError
 
 from mesh_to_housing import (
-    ChamferDistanceConfig, ConfigError, Construction, Cuboid, FittingPipeline, HausdorffDistanceConfig, Loss,
-    Placement, SurfaceFScoreConfig, SurfacePrecisionConfig, SurfaceRecallConfig, VoxelGridConfig,
+    ChamferDistanceConfig, ConfigError, Construction, Cuboid, ExcessRoughnessConfig, FittingPipeline,
+    HausdorffDistanceConfig, Loss, Placement, SurfaceFScoreConfig, SurfacePrecisionConfig, SurfaceRecallConfig,
+    VoxelGridConfig,
 )
 
 GRID = VoxelGridConfig(resolution=16)
@@ -104,3 +107,44 @@ def test_metrics_read_from_yaml():
     assert pipeline.losses["fscore"] == SurfaceFScoreConfig(surface_tolerance=0.05)
     assert pipeline.metrics["accuracy"] == ChamferDistanceConfig(direction="to_target")
     assert FittingPipeline.from_yaml(pipeline.to_yaml()) == pipeline
+
+
+# Roughness is measured over two cells, so its tests need parts a few cells across.
+ROUGH_GRID = VoxelGridConfig(resolution=32)
+BUMP = ((0.25, 0.25, 0.25), (0.0, 0.0, 0.625))
+RIDGE = ((1.5, 0.25, 0.25), (0.0, 0.0, 0.625))
+
+
+def ridged(scale=1.0):
+    """The target box with a ridge along the middle of its top face."""
+    size, center = RIDGE
+    ridge = trimesh.creation.box(extents=np.multiply(size, scale))
+    ridge.apply_translation(np.multiply(center, scale))
+    return trimesh.util.concatenate([target(scale), ridge])
+
+
+def excess_roughness(target_mesh, construction):
+    return Loss.from_config(ExcessRoughnessConfig(grid=ROUGH_GRID))(target_mesh, construction)
+
+
+def test_excess_roughness_is_near_zero_without_extra_bumps():
+    whole = ((2.0, 1.0, 1.0), (0.0, 0.0, 0.0))
+    bumped = excess_roughness(target(), boxes(whole, BUMP))
+    assert excess_roughness(target(), Construction()) == 0.0
+    assert excess_roughness(target(), boxes(whole)) < bumped / 100
+    assert excess_roughness(ridged(), boxes(whole, RIDGE)) < bumped / 10
+    # Smoother than the target costs nothing: flattened detail is for uncovered surface.
+    assert excess_roughness(ridged(), boxes(whole)) < bumped / 10
+
+
+def test_excess_roughness_charges_bumps_the_target_does_not_have():
+    whole = ((2.0, 1.0, 1.0), (0.0, 0.0, 0.0))
+    assert excess_roughness(target(), boxes(whole, BUMP)) > 0.005
+    assert excess_roughness(target(), boxes(whole, RIDGE)) > 5 * excess_roughness(ridged(), boxes(whole, RIDGE))
+
+
+def test_excess_roughness_keeps_its_meaning_at_any_target_size():
+    def value(scale):
+        return excess_roughness(target(scale), boxes(((2.0, 1.0, 1.0), (0.0, 0.0, 0.0)), BUMP, scale=scale))
+
+    assert value(3.0) == pytest.approx(value(1.0))

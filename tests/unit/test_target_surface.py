@@ -1,4 +1,4 @@
-"""Thickness and roughness of the target surface."""
+"""Thickness, thinness and roughness of the target surface."""
 import numpy as np
 import pytest
 import trimesh
@@ -43,6 +43,12 @@ def test_thin_flat_parts_are_not_rough(cells_thick):
     plate = VoxelGrid.from_mesh(trimesh.creation.box(extents=(4.0, 4.0, cells_thick * PITCH)),
                                 VoxelGridConfig(voxel_pitch=PITCH))
     assert plate.surface.roughness(2 * PITCH)[face_middle(plate)].max() < 1e-6
+
+
+def test_thinness_is_zero_for_thick_parts_and_rises_for_thin_ones(slab):
+    assert slab.surface.thinness(4 * PITCH)[face_middle(slab)].max() < 0.13
+    plate = VoxelGrid.from_mesh(trimesh.creation.box(extents=(4.0, 4.0, 2 * PITCH)), VoxelGridConfig(voxel_pitch=PITCH))
+    np.testing.assert_allclose(plate.surface.thinness(4 * PITCH)[face_middle(plate)], 0.75, atol=0.13)
 
 
 def test_measures_are_cached_and_read_only(slab):

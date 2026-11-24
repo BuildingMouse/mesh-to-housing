@@ -4,11 +4,11 @@ from ..construction import Construction
 from .cells import cell_indices
 
 
-def outer_surfaces(grid: "VoxelGrid", construction: Construction) -> tuple[np.ndarray, np.ndarray]:
-    """The target's surface and the construction's outer surface, as boolean masks on one shared frame.
-    Empty space enclosed inside the construction counts as filled, so only surface that faces the outside is kept.
+def outer_solids(grid: "VoxelGrid", construction: Construction) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """The target's outer surface and the construction's solid, as boolean masks on one shared frame, and the cell index
+    of the frame's first cell. Empty space enclosed inside the construction counts as part of its solid.
     """
-    from scipy.ndimage import binary_erosion, binary_fill_holes
+    from scipy.ndimage import binary_fill_holes
 
     target_surface, target_low = grid.surface.mask, grid.box.low
     keys = list(grid.item_cells.occupied_by_each(construction))
@@ -22,7 +22,16 @@ def outer_surfaces(grid: "VoxelGrid", construction: Construction) -> tuple[np.nd
     target[tuple(slice(first, first + size) for first, size in zip(start, target_surface.shape))] = target_surface
     solid = np.zeros(shape, dtype=bool)
     solid[tuple((cells - low).T)] = True
-    solid = binary_fill_holes(solid)
+    return target, binary_fill_holes(solid), low
+
+
+def outer_surfaces(grid: "VoxelGrid", construction: Construction) -> tuple[np.ndarray, np.ndarray]:
+    """The outer surfaces of the target and the construction, as boolean masks on one shared frame.
+    Empty space enclosed inside the construction counts as filled, so only surface that faces the outside is kept.
+    """
+    from scipy.ndimage import binary_erosion
+
+    target, solid, _ = outer_solids(grid, construction)
     return target, solid & ~binary_erosion(solid)
 
 

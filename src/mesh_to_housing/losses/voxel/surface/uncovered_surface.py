@@ -1,18 +1,33 @@
-from typing import Literal
+from typing import Literal, Optional
+
+import numpy as np
 
 from ....geometry.coverage import covered_surface_keys
+from ....geometry.settings import ThinnessSettings
+from ....utils.values import NonNegativeFloat, PositiveFloat
 from ...base import implements
 from ...cell_sessions import CoverageSession
 from ..base import SurfaceToleranceConfig, VoxelLoss
 
 
-class UncoveredSurfaceConfig(SurfaceToleranceConfig):
+class UncoveredSurfaceConfig(ThinnessSettings, SurfaceToleranceConfig):
     type: Literal["uncovered_surface"] = "uncovered_surface"
     skin_only: bool = False
+    roughness_radius: Optional[PositiveFloat] = None
+    roughness_weight: NonNegativeFloat = 0.0
+    thinness_weight: NonNegativeFloat = 0.0
 
 
 @implements(UncoveredSurfaceConfig)
 class UncoveredSurfaceLoss(VoxelLoss):
+    """The share of the target surface that no item covers within the surface tolerance.
+
+    Each target surface cell weighs 1 + roughness_weight * its roughness + thinness_weight * its thinness. Roughness
+    makes claws, ears and edges count for more than a smooth face of the same area; thinness does the same for legs,
+    tails and wings, which are easy to lose because they have little surface. Roughness is measured within
+    roughness_radius, two cells unless set.
+    """
+
     def session(self, target):
         grid = self.grid(target)
         tolerance = self.config.tolerance_for(target)
@@ -20,4 +35,23 @@ class UncoveredSurfaceLoss(VoxelLoss):
         def covered_surface(placements):
             return covered_surface_keys(grid, placements, tolerance, skin_only=self.config.skin_only)
 
-        return CoverageSession(covered_surface, reference=len(grid.surface))
+        weights = self._weights(grid)
+        if weights is None:
+            return CoverageSession(covered_surface, reference=len(grid.surface))
+
+        def weights_of(keys):
+            return weights[grid.surface.index_of(keys)]
+
+        return CoverageSession(covered_surface, reference=float(weights.sum()), weights=weights_of)
+
+    def _weights(self, grid):
+        config = self.config
+        if config.roughness_weight == 0 and config.thinness_weight == 0:
+            return None
+        weights = np.ones(len(grid.surface))
+        if config.roughness_weight:
+            radius = 2 * grid.pitch if config.roughness_radius is None else config.roughness_radius
+            weights += config.roughness_weight * grid.surface.roughness(radius)
+        if config.thinness_weight:
+            weights += config.thinness_weight * grid.surface.thinness(config.thinness_radius_for(grid))
+        return weights
