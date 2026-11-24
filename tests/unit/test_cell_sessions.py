@@ -5,10 +5,11 @@ import pytest
 from mesh_to_housing import (
     ExcessSurfaceConfig, Loss, OutsideVolumeConfig, UncoveredSurfaceConfig, UncoveredVolumeConfig,
 )
+from mesh_to_housing.geometry.cells import cell_keys
+from mesh_to_housing.geometry.coverage import covered_surface_keys
+from mesh_to_housing.losses.cell_sessions import CoverageSession, PenaltySession
 
-from ..reference import expanded, sampled_cells, skin
-
-ADD_AND_REMOVE = [(True, 0), (True, 2), (True, 1), (False, 0), (True, 4), (False, 2), (False, 1), (False, 4)]
+from ..reference import expanded, follow, sampled_cells, skin
 
 
 def loss_config(kind, grid_config, tolerance):
@@ -43,18 +44,27 @@ def test_values_and_gains_follow_adds_and_removes(task, grid_config, grid, place
     reference = len(target if kind.endswith("volume") else surface)
     penalty = kind in ("outside volume", "excess surface")
     session = Loss.from_config(loss_config(kind, grid_config, tolerance)).session(task.target)
-    scorer = session.scorer(placements)
-    placed = []
-    for adding, index in ADD_AND_REMOVE:
-        if adding:
-            placed.append(placements[index])
-            session.add(placements[index])
-        else:
-            placed.remove(placements[index])
-            session.remove(placements[index])
-        union = frozenset().union(*(counted(placement) for placement in placed))
-        expected = len(union) / reference if penalty else 1.0 - len(union) / reference
-        assert session.value() == pytest.approx(expected, abs=1e-12)
-        gains = [(-1 if penalty else 1) * len(counted(placement) - union) / reference for placement in placements]
-        np.testing.assert_allclose(scorer.gains(), gains, atol=1e-12, rtol=0)
-        np.testing.assert_allclose([session.gain(placement) for placement in placements], gains, atol=1e-12, rtol=0)
+    follow(session, placements, counted, reference, penalty)
+
+def weight_of(keys):
+    """A fixed, uneven weight for each cell."""
+    return 0.5 + (np.asarray(keys) % 7) * 0.4
+
+
+@pytest.mark.parametrize("penalty", [False, True])
+def test_weighted_sessions_sum_the_weights_of_scored_cells(task, grid, placements, penalty):
+    tolerance = grid.pitch * 1.1
+    surface = skin(frozenset(map(tuple, grid.indices)))
+    reference = float(weight_of(cell_keys(np.array(sorted(surface)))).sum())
+
+    def counted(placement):
+        return expanded(sampled_cells(grid, placement), grid.pitch, tolerance) & surface
+
+    def cells_of(placements):
+        return covered_surface_keys(grid, placements, tolerance)
+
+    def weighed(cells):
+        return float(weight_of(cell_keys(np.array(sorted(cells)).reshape(-1, 3))).sum())
+
+    session = (PenaltySession if penalty else CoverageSession)(cells_of, reference, weights=weight_of)
+    follow(session, placements, counted, reference, penalty, weighed)

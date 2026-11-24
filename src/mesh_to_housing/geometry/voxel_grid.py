@@ -64,6 +64,15 @@ class VoxelGrid:
         solid[tuple((self.indices - self.box.low).T)] = True
         return solid
 
+    @cached_property
+    def inner_depth(self) -> np.ndarray:
+        """How deep each cell lies inside the target, counted in cells. Cells outside are 0, and the target's outer
+        layer is 1.
+        """
+        from scipy.ndimage import distance_transform_edt
+
+        return distance_transform_edt(np.pad(self.solid_mask, 1))[1:-1, 1:-1, 1:-1]
+
     def in_target(self, keys: CellKeys) -> np.ndarray:
         return self.box.lookup(self.solid_mask, keys)
 

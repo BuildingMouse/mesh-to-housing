@@ -28,6 +28,21 @@ def test_cell_holders_count_the_keys_each_candidate_holds_across_chunks():
     np.testing.assert_array_equal(holders.counts(asked), [np.isin(keys, asked).sum() for keys in lists])
 
 
+def test_cell_holders_sum_the_weights_of_the_cells_they_hold():
+    rng = np.random.default_rng(4)
+    lists = [np.unique(cell_keys(rng.integers(-5, 5, (int(size), 3)))) for size in rng.integers(0, 30, 23)]
+    holders = CellHolders(lists, len(lists), keys_per_chunk=40)
+    asked = np.unique(cell_keys(rng.integers(-6, 6, (200, 3))))
+
+    def weigh(keys):
+        return 0.5 + (keys % 7) * 0.4
+
+    np.testing.assert_allclose(holders.counts(asked, weigh),
+                               [weigh(np.intersect1d(keys, asked)).sum() for keys in lists])
+    np.testing.assert_allclose(holders.totals(weigh), [weigh(keys).sum() for keys in lists])
+    np.testing.assert_array_equal(holders.totals(), [len(keys) for keys in lists])
+
+
 def test_cell_holders_of_no_cells_count_nothing():
     holders = CellHolders([np.zeros(0, dtype=np.int64)] * 3, 3)
     np.testing.assert_array_equal(holders.counts(cell_keys(CELLS)), [0, 0, 0])
