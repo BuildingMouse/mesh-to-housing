@@ -1,19 +1,18 @@
-from typing import Literal, Optional
+from typing import Literal
 
 import numpy as np
 
 from ....geometry.coverage import covered_surface_keys
-from ....geometry.settings import ThinnessSettings
-from ....utils.values import NonNegativeFloat, PositiveFloat
+from ....geometry.settings import RoughnessSettings, ThinnessSettings
+from ....utils.values import NonNegativeFloat
 from ...base import implements
 from ...cell_sessions import CoverageSession
 from ..base import SurfaceToleranceConfig, VoxelLoss
 
 
-class UncoveredSurfaceConfig(ThinnessSettings, SurfaceToleranceConfig):
+class UncoveredSurfaceConfig(RoughnessSettings, ThinnessSettings, SurfaceToleranceConfig):
     type: Literal["uncovered_surface"] = "uncovered_surface"
     skin_only: bool = False
-    roughness_radius: Optional[PositiveFloat] = None
     roughness_weight: NonNegativeFloat = 0.0
     thinness_weight: NonNegativeFloat = 0.0
 
@@ -24,8 +23,7 @@ class UncoveredSurfaceLoss(VoxelLoss):
 
     Each target surface cell weighs 1 + roughness_weight * its roughness + thinness_weight * its thinness. Roughness
     makes claws, ears and edges count for more than a smooth face of the same area; thinness does the same for legs,
-    tails and wings, which are easy to lose because they have little surface. Roughness is measured within
-    roughness_radius, two cells unless set.
+    tails and wings, which are easy to lose because they have little surface.
     """
 
     def session(self, target):
@@ -50,8 +48,7 @@ class UncoveredSurfaceLoss(VoxelLoss):
             return None
         weights = np.ones(len(grid.surface))
         if config.roughness_weight:
-            radius = 2 * grid.pitch if config.roughness_radius is None else config.roughness_radius
-            weights += config.roughness_weight * grid.surface.roughness(radius)
+            weights += config.roughness_weight * grid.surface.roughness(config.roughness_radius_for(grid))
         if config.thinness_weight:
             weights += config.thinness_weight * grid.surface.thinness(config.thinness_radius_for(grid))
         return weights

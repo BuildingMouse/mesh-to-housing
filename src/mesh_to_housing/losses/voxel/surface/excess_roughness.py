@@ -1,18 +1,16 @@
-from typing import Literal, Optional
+from typing import Literal
 
 import numpy as np
 
 from ....geometry.cells import cell_keys
 from ....geometry.outer_surface import outer_solids
 from ....geometry.surface import solid_normals, surface_roughness
-from ....utils.values import PositiveFloat
 from ...base import Loss, implements
-from ..base import VoxelLossConfig
+from ..base import RoughnessConfig
 
 
-class ExcessRoughnessConfig(VoxelLossConfig):
+class ExcessRoughnessConfig(RoughnessConfig):
     type: Literal["excess_roughness"] = "excess_roughness"
-    roughness_radius: Optional[PositiveFloat] = None
 
 
 @implements(ExcessRoughnessConfig)
@@ -27,7 +25,7 @@ class ExcessRoughnessLoss(Loss):
         surface = solid & ~binary_erosion(solid)
         if not surface.any():
             return 0.0
-        radius = 2 * grid.pitch if self.config.roughness_radius is None else self.config.roughness_radius
+        radius = self.config.roughness_radius_for(grid)
         cells = np.argwhere(surface)
         roughness = surface_roughness(surface, cells, solid_normals(solid, cells), grid.pitch, radius)
         nearest = distance_transform_edt(~target_surface, return_distances=False, return_indices=True)

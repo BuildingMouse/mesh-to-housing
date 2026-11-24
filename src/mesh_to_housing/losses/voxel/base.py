@@ -1,4 +1,4 @@
-from ...geometry.settings import GridSettings, SurfaceSettings
+from ...geometry.settings import GridSettings, RoughnessSettings, SurfaceSettings
 from ...geometry.voxel_grid import VoxelGrid
 from ..base import IncrementalLoss, LossConfig
 from ..cell_sessions import CoverageSession, PenaltySession
@@ -9,6 +9,10 @@ class VoxelLossConfig(GridSettings, LossConfig):
 
 
 class SurfaceToleranceConfig(SurfaceSettings, VoxelLossConfig):
+    pass
+
+
+class RoughnessConfig(RoughnessSettings, VoxelLossConfig):
     pass
 
 

@@ -21,6 +21,15 @@ class SurfaceSettings(GridSettings):
         return float(target.extents.max() / 96 if self.surface_tolerance is None else self.surface_tolerance)
 
 
+class RoughnessSettings(GridSettings):
+    """Roughness is measured within roughness_radius of each surface cell, two cells unless set."""
+
+    roughness_radius: Optional[PositiveFloat] = None
+
+    def roughness_radius_for(self, grid: VoxelGrid) -> float:
+        return 2 * grid.pitch if self.roughness_radius is None else self.roughness_radius
+
+
 class ThinnessSettings(GridSettings):
     """A part counts as thin when it is narrower than twice thinness_radius, four cells unless set."""
 
