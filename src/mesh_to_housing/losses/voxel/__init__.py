@@ -2,8 +2,7 @@ from .base import CoverageSession, PenaltySession, SurfaceToleranceConfig, Voxel
 from .surface import (
     ChamferDistanceConfig, ChamferDistanceLoss, ExcessRoughnessConfig, ExcessRoughnessLoss, ExcessSurfaceConfig,
     ExcessSurfaceLoss, HausdorffDistanceConfig, HausdorffDistanceLoss, SurfaceFScoreConfig, SurfaceFScoreLoss,
-    SurfacePrecisionConfig, SurfacePrecisionLoss, SurfaceRecallConfig, SurfaceRecallLoss, UncoveredSurfaceConfig,
-    UncoveredSurfaceLoss,
+    UncoveredSurfaceConfig, UncoveredSurfaceLoss,
 )
 from .volume import OutsideVolumeConfig, OutsideVolumeLoss, UncoveredVolumeConfig, UncoveredVolumeLoss
 
@@ -11,7 +10,6 @@ __all__ = [
     "ChamferDistanceConfig", "ChamferDistanceLoss", "CoverageSession", "ExcessRoughnessConfig", "ExcessRoughnessLoss",
     "ExcessSurfaceConfig", "ExcessSurfaceLoss", "HausdorffDistanceConfig", "HausdorffDistanceLoss",
     "OutsideVolumeConfig", "OutsideVolumeLoss", "PenaltySession", "SurfaceFScoreConfig", "SurfaceFScoreLoss",
-    "SurfacePrecisionConfig", "SurfacePrecisionLoss", "SurfaceRecallConfig", "SurfaceRecallLoss",
     "SurfaceToleranceConfig", "UncoveredSurfaceConfig", "UncoveredSurfaceLoss", "UncoveredVolumeConfig",
     "UncoveredVolumeLoss", "VoxelLoss", "VoxelLossConfig",
 ]

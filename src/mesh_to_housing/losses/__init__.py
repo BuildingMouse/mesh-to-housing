@@ -8,15 +8,14 @@ from .sessions import FullEvaluationSession
 from .voxel import (
     ChamferDistanceConfig, ChamferDistanceLoss, ExcessRoughnessConfig, ExcessRoughnessLoss, ExcessSurfaceConfig,
     ExcessSurfaceLoss, HausdorffDistanceConfig, HausdorffDistanceLoss, OutsideVolumeConfig, OutsideVolumeLoss,
-    SurfaceFScoreConfig, SurfaceFScoreLoss, SurfacePrecisionConfig, SurfacePrecisionLoss, SurfaceRecallConfig,
-    SurfaceRecallLoss, UncoveredSurfaceConfig, UncoveredSurfaceLoss, UncoveredVolumeConfig, UncoveredVolumeLoss,
+    SurfaceFScoreConfig, SurfaceFScoreLoss, UncoveredSurfaceConfig, UncoveredSurfaceLoss, UncoveredVolumeConfig,
+    UncoveredVolumeLoss,
 )
 
 LossConfigs = Annotated[
     Union[
         ChamferDistanceConfig, CombinedLossConfig, ExcessRoughnessConfig, ExcessSurfaceConfig, HausdorffDistanceConfig,
-        OutsideVolumeConfig, SurfaceFScoreConfig, SurfacePrecisionConfig, SurfaceRecallConfig, UncoveredSurfaceConfig,
-        UncoveredVolumeConfig,
+        OutsideVolumeConfig, SurfaceFScoreConfig, UncoveredSurfaceConfig, UncoveredVolumeConfig,
     ],
     Field(discriminator="type"),
 ]
@@ -28,6 +27,5 @@ __all__ = [
     "ExcessRoughnessConfig", "ExcessRoughnessLoss", "ExcessSurfaceConfig", "ExcessSurfaceLoss", "FullEvaluationSession",
     "HausdorffDistanceConfig", "HausdorffDistanceLoss", "IncrementalLoss", "Loss", "LossConfig", "LossConfigs",
     "LossSession", "LossTerm", "OutsideVolumeConfig", "OutsideVolumeLoss", "SurfaceFScoreConfig", "SurfaceFScoreLoss",
-    "SurfacePrecisionConfig", "SurfacePrecisionLoss", "SurfaceRecallConfig", "SurfaceRecallLoss",
     "UncoveredSurfaceConfig", "UncoveredSurfaceLoss", "UncoveredVolumeConfig", "UncoveredVolumeLoss", "implements",
 ]

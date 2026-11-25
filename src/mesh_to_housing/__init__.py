@@ -14,8 +14,8 @@ from .losses import (
     CandidateScorer, ChamferDistanceConfig, ChamferDistanceLoss, CombinedLoss, CombinedLossConfig,
     ExcessRoughnessConfig, ExcessRoughnessLoss, ExcessSurfaceConfig, ExcessSurfaceLoss, HausdorffDistanceConfig,
     HausdorffDistanceLoss, Loss, LossConfig, LossSession, LossTerm, OutsideVolumeConfig, OutsideVolumeLoss,
-    SurfaceFScoreConfig, SurfaceFScoreLoss, SurfacePrecisionConfig, SurfacePrecisionLoss, SurfaceRecallConfig,
-    SurfaceRecallLoss, UncoveredSurfaceConfig, UncoveredSurfaceLoss, UncoveredVolumeConfig, UncoveredVolumeLoss,
+    SurfaceFScoreConfig, SurfaceFScoreLoss, UncoveredSurfaceConfig, UncoveredSurfaceLoss, UncoveredVolumeConfig,
+    UncoveredVolumeLoss,
 )
 from .meshes.loading import MeshLoader
 from .meshes.preparation import prepare_mesh, resize_mesh
@@ -29,8 +29,7 @@ __all__ = [
     "LossConfig", "LossSession", "LossTerm", "MeshItem", "MeshLoader", "MeshProcessor", "Moves", "Nudges",
     "OutsideVolumeConfig", "OutsideVolumeLoss", "Placement", "Polish", "ProposalSource", "RandomPool", "Refine",
     "Repeat", "Report", "ResidualProposals", "ScoreAll", "SelectionConfig", "Shortlist", "SizeRange", "SparseResult",
-    "Stage", "Step", "SurfaceFScoreConfig", "SurfaceFScoreLoss", "SurfacePrecisionConfig", "SurfacePrecisionLoss",
-    "SurfaceRecallConfig", "SurfaceRecallLoss", "Swaps", "TransformConstraints", "UncoveredSurfaceConfig",
-    "UncoveredSurfaceLoss", "UncoveredVolumeConfig", "UncoveredVolumeLoss", "VoxelGridConfig", "load_catalog",
-    "prepare_mesh", "resize_mesh",
+    "Stage", "Step", "SurfaceFScoreConfig", "SurfaceFScoreLoss", "Swaps", "TransformConstraints",
+    "UncoveredSurfaceConfig", "UncoveredSurfaceLoss", "UncoveredVolumeConfig", "UncoveredVolumeLoss", "VoxelGridConfig",
+    "load_catalog", "prepare_mesh", "resize_mesh",
 ]

@@ -1,6 +1,4 @@
-"""Precision, recall, F-score, Chamfer, Hausdorff and excess roughness between the outer surfaces of the target
-and the construction.
-"""
+"""F-score, Chamfer, Hausdorff and excess roughness between the outer surfaces of the target and the construction."""
 import numpy as np
 import pytest
 import trimesh
@@ -8,13 +6,12 @@ from pydantic import ValidationError
 
 from mesh_to_housing import (
     ChamferDistanceConfig, ConfigError, Construction, Cuboid, ExcessRoughnessConfig, FittingPipeline,
-    HausdorffDistanceConfig, Loss, Placement, SurfaceFScoreConfig, SurfacePrecisionConfig, SurfaceRecallConfig,
-    VoxelGridConfig,
+    HausdorffDistanceConfig, Loss, Placement, SurfaceFScoreConfig, VoxelGridConfig,
 )
 
 GRID = VoxelGridConfig(resolution=16)
-SCORES = (SurfaceFScoreConfig, SurfacePrecisionConfig, SurfaceRecallConfig)
-DISTANCES = (ChamferDistanceConfig, HausdorffDistanceConfig)
+METRICS = (SurfaceFScoreConfig, ChamferDistanceConfig, HausdorffDistanceConfig)
+DIRECTIONS = ("both", "to_target", "to_construction")
 
 
 def target(scale=1.0):
@@ -32,20 +29,23 @@ def loss(config_class, **settings):
     return Loss.from_config(config_class(grid=GRID, **settings))
 
 
-@pytest.mark.parametrize("config_class", SCORES + DISTANCES)
-def test_an_empty_construction_scores_one(config_class):
-    assert loss(config_class)(target(), Construction()) == 1.0
+@pytest.mark.parametrize("direction", DIRECTIONS)
+@pytest.mark.parametrize("config_class", METRICS)
+def test_an_empty_construction_scores_one(config_class, direction):
+    assert loss(config_class, direction=direction)(target(), Construction()) == 1.0
 
 
-@pytest.mark.parametrize("config_class", SCORES + DISTANCES)
-def test_an_exact_match_scores_zero(config_class):
-    assert loss(config_class)(target(), boxes(((2.0, 1.0, 1.0), (0.0, 0.0, 0.0)))) == pytest.approx(0.0, abs=1e-9)
+@pytest.mark.parametrize("direction", DIRECTIONS)
+@pytest.mark.parametrize("config_class", METRICS)
+def test_an_exact_match_scores_zero(config_class, direction):
+    exact = boxes(((2.0, 1.0, 1.0), (0.0, 0.0, 0.0)))
+    assert loss(config_class, direction=direction)(target(), exact) == pytest.approx(0.0, abs=1e-9)
 
 
 def test_a_box_shifted_by_half_its_length():
     shifted = boxes(((2.0, 1.0, 1.0), (1.0, 0.0, 0.0)))
-    precision, recall, fscore = (loss(config_class)(target(), shifted) for config_class in
-                                 (SurfacePrecisionConfig, SurfaceRecallConfig, SurfaceFScoreConfig))
+    precision, recall, fscore = (loss(SurfaceFScoreConfig, direction=direction)(target(), shifted)
+                                 for direction in ("to_target", "to_construction", "both"))
     assert precision == pytest.approx(recall)
     assert fscore == pytest.approx(precision)
     assert 0.0 < fscore < 1.0
@@ -55,10 +55,9 @@ def test_a_box_shifted_by_half_its_length():
 
 def test_directions_measure_each_side():
     half = boxes(((1.0, 1.0, 1.0), (-0.5, 0.0, 0.0)))
-    chamfer = {direction: loss(ChamferDistanceConfig, direction=direction)(target(), half)
-               for direction in ("both", "to_target", "to_construction")}
+    chamfer = {direction: loss(ChamferDistanceConfig, direction=direction)(target(), half) for direction in DIRECTIONS}
     hausdorff = {direction: loss(HausdorffDistanceConfig, direction=direction)(target(), half)
-                 for direction in ("both", "to_target", "to_construction")}
+                 for direction in DIRECTIONS}
     # The half box lies inside the target, so the missing half shows only from the target's side.
     assert chamfer["to_target"] < chamfer["to_construction"]
     assert chamfer["both"] == pytest.approx((chamfer["to_target"] + chamfer["to_construction"]) / 2)
@@ -68,8 +67,8 @@ def test_directions_measure_each_side():
 
 def test_target_surface_buried_inside_an_item_counts_as_missed():
     around = boxes(((3.0, 2.0, 2.0), (0.0, 0.0, 0.0)))
-    assert loss(SurfaceRecallConfig)(target(), around) == 1.0
-    assert loss(SurfacePrecisionConfig)(target(), around) == 1.0
+    assert loss(SurfaceFScoreConfig, direction="to_construction")(target(), around) == 1.0
+    assert loss(SurfaceFScoreConfig, direction="to_target")(target(), around) == 1.0
 
 
 def test_space_enclosed_inside_the_construction_counts_as_filled():
@@ -78,11 +77,11 @@ def test_space_enclosed_inside_the_construction_counts_as_filled():
     shell = boxes(((2.0, 1.0, wall), (0.0, 0.0, 0.5 - wall / 2)), ((2.0, 1.0, wall), (0.0, 0.0, -0.5 + wall / 2)),
                   ((2.0, wall, 1.0), (0.0, 0.5 - wall / 2, 0.0)), ((2.0, wall, 1.0), (0.0, -0.5 + wall / 2, 0.0)),
                   ((wall, 1.0, 1.0), (1.0 - wall / 2, 0.0, 0.0)), ((wall, 1.0, 1.0), (-1.0 + wall / 2, 0.0, 0.0)))
-    for config_class in SCORES + DISTANCES:
+    for config_class in METRICS:
         assert loss(config_class)(target(), shell) == pytest.approx(0.0, abs=1e-9)
 
 
-@pytest.mark.parametrize("config_class", SCORES + DISTANCES)
+@pytest.mark.parametrize("config_class", METRICS)
 def test_values_keep_their_meaning_at_any_target_size(config_class):
     def value(scale):
         return loss(config_class)(target(scale), boxes(((1.0, 1.0, 1.0), (-0.5, 0.0, 0.0)),
@@ -102,7 +101,7 @@ def test_metrics_read_from_yaml():
     pipeline = FittingPipeline.from_yaml(
         "losses: {fscore: {type: surface_fscore, surface_tolerance: 0.05}}\n"
         "metrics:\n"
-        "  recall: {type: surface_recall}\n"
+        "  recall: {type: surface_fscore, direction: to_construction}\n"
         "  accuracy: {type: chamfer_distance, direction: to_target}\n")
     assert pipeline.losses["fscore"] == SurfaceFScoreConfig(surface_tolerance=0.05)
     assert pipeline.metrics["accuracy"] == ChamferDistanceConfig(direction="to_target")

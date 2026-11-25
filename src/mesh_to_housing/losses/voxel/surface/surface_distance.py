@@ -5,25 +5,19 @@ import numpy as np
 
 from ....geometry.outer_surface import nearest_distances, outer_surfaces
 from ...base import Loss, implements
-from ..base import VoxelLossConfig
+from ..base import SurfaceDirectionConfig
 
 
-class SurfaceDistanceConfig(VoxelLossConfig):
-    """The direction measures from the construction "to_target", from the target "to_construction", or "both"."""
-
-    direction: Literal["both", "to_target", "to_construction"] = "both"
-
-
-class ChamferDistanceConfig(SurfaceDistanceConfig):
+class ChamferDistanceConfig(SurfaceDirectionConfig):
     type: Literal["chamfer_distance"] = "chamfer_distance"
 
 
-class HausdorffDistanceConfig(SurfaceDistanceConfig):
+class HausdorffDistanceConfig(SurfaceDirectionConfig):
     type: Literal["hausdorff_distance"] = "hausdorff_distance"
 
 
 class SurfaceDistanceLoss(Loss):
-    """A summary of the distances between the target surface and the construction's outer surface.
+    """A summary of the distances between the outer surfaces of the target and the construction.
     Distances are divided by the target's longest side, so they keep their meaning at any target size.
     """
 
