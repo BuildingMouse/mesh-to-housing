@@ -47,6 +47,10 @@ class Placement:
         transform[:3, 3] = self.center
         return transform
 
+    def world_points(self, points: np.ndarray) -> np.ndarray:
+        """Points given in the item's own frame, where the placement puts them."""
+        return np.asarray(points) * self.scale @ self.rotation.T + self.center
+
     @property
     def box_center(self) -> np.ndarray:
         """Where the middle of the item's bounding box lies in the world."""

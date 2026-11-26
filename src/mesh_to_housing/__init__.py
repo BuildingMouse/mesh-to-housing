@@ -1,7 +1,7 @@
 from .pipeline.processor import MeshProcessor, SparseResult
 from .fitting import (
-    CandidateSettings, Fill, FittingPipeline, ItemKinds, ItemSettings, Moves, Nudges, Polish, ProposalSource,
-    RandomPool, Refine, Repeat, Report, ResidualProposals, ScoreAll, SelectionConfig, Shortlist,
+    CandidateSettings, Chain, Fill, FittingPipeline, ItemKinds, ItemSettings, Link, Moves, Nudges, Polish,
+    ProposalSource, RandomPool, Refine, Repeat, Report, ResidualProposals, ScoreAll, SelectionConfig, Shortlist,
     SizeRange, Stage, Step, Swaps,
 )
 from .utils.config import Config, ConfigError
@@ -22,11 +22,11 @@ from .meshes.preparation import prepare_mesh, resize_mesh
 from .placement import Placement
 
 __all__ = [
-    "CandidateScorer", "CandidateSettings", "ChamferDistanceConfig", "ChamferDistanceLoss", "CombinedLoss",
+    "CandidateScorer", "CandidateSettings", "Chain", "ChamferDistanceConfig", "ChamferDistanceLoss", "CombinedLoss",
     "CombinedLossConfig", "Config", "ConfigError", "Construction", "Cuboid", "ExcessRoughnessConfig",
     "ExcessRoughnessLoss", "ExcessSurfaceConfig", "ExcessSurfaceLoss", "Execution", "Fill", "FittingPipeline",
-    "FittingTask", "HausdorffDistanceConfig", "HausdorffDistanceLoss", "Item", "ItemKinds", "ItemSettings", "Loss",
-    "LossConfig", "LossSession", "LossTerm", "MeshItem", "MeshLoader", "MeshProcessor", "Moves", "Nudges",
+    "FittingTask", "HausdorffDistanceConfig", "HausdorffDistanceLoss", "Item", "ItemKinds", "ItemSettings", "Link",
+    "Loss", "LossConfig", "LossSession", "LossTerm", "MeshItem", "MeshLoader", "MeshProcessor", "Moves", "Nudges",
     "OutsideVolumeConfig", "OutsideVolumeLoss", "Placement", "Polish", "ProposalSource", "RandomPool", "Refine",
     "Repeat", "Report", "ResidualProposals", "ScoreAll", "SelectionConfig", "Shortlist", "SizeRange", "SparseResult",
     "Stage", "Step", "SurfaceFScoreConfig", "SurfaceFScoreLoss", "Swaps", "TransformConstraints",
