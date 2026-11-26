@@ -36,3 +36,10 @@ def flat_top_mesh():
     stem = trimesh.creation.cylinder(radius=0.12, height=0.525)
     stem.apply_translation((0.0, 0.0, 0.2625))
     return trimesh.util.concatenate([top, stem])
+
+
+def taper_mesh():
+    """A bar that narrows from one end to the other"""
+    square = np.array([(-1, -1), (1, -1), (-1, 1), (1, 1)])
+    corners = [(0.0, *corner) for corner in square * 0.15] + [(1.0, *corner) for corner in square * 0.05]
+    return trimesh.convex.convex_hull(np.array(corners))

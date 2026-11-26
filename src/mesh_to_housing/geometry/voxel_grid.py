@@ -91,6 +91,9 @@ class VoxelGrid:
             distances[~inside] = self._target_tree.query(cell_indices(keys[~inside]))[0] * self.pitch
         return distances
 
+    def near_target(self, keys: CellKeys) -> np.ndarray:
+        return self.outside_distance(keys) <= self.pitch * (1 + 1e-9)
+
     def outward_normals(self, indices: np.ndarray) -> np.ndarray:
         """Outward unit normals at the given target cells."""
         from .surface import solid_normals

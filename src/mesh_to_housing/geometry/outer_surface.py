@@ -11,8 +11,7 @@ def outer_solids(grid: "VoxelGrid", construction: Construction) -> tuple[np.ndar
     from scipy.ndimage import binary_fill_holes
 
     target_surface, target_low = grid.surface.mask, grid.box.low
-    keys = list(grid.item_cells.occupied_by_each(construction))
-    cells = cell_indices(np.unique(np.concatenate(keys)) if keys else np.zeros(0, dtype=np.int64))
+    cells = cell_indices(grid.item_cells.occupied_by_any(construction))
     bounds = np.vstack((target_low, target_low + target_surface.shape - 1, cells))
     low = bounds.min(axis=0)
     shape = bounds.max(axis=0) - low + 1

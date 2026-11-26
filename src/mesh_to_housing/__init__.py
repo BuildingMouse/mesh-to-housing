@@ -1,8 +1,8 @@
 from .pipeline.processor import MeshProcessor, SparseResult
 from .fitting import (
-    CandidateSettings, Chain, Fill, FittingPipeline, ItemKinds, ItemSettings, Link, Moves, Nudges, Polish,
+    CandidateSettings, Chain, Fill, FittingPipeline, ItemKinds, ItemSettings, Link, MedialChains, Moves, Nudges, Polish,
     ProposalSource, RandomPool, Refine, Repeat, Report, ResidualProposals, ScoreAll, SelectionConfig, Shortlist,
-    SizeRange, Stage, Step, Swaps,
+    SizeRange, Stage, Step, SurfaceChains, Swaps,
 )
 from .utils.config import Config, ConfigError
 from .construction import Construction
@@ -26,10 +26,10 @@ __all__ = [
     "CombinedLossConfig", "Config", "ConfigError", "Construction", "Cuboid", "ExcessRoughnessConfig",
     "ExcessRoughnessLoss", "ExcessSurfaceConfig", "ExcessSurfaceLoss", "Execution", "Fill", "FittingPipeline",
     "FittingTask", "HausdorffDistanceConfig", "HausdorffDistanceLoss", "Item", "ItemKinds", "ItemSettings", "Link",
-    "Loss", "LossConfig", "LossSession", "LossTerm", "MeshItem", "MeshLoader", "MeshProcessor", "Moves", "Nudges",
-    "OutsideVolumeConfig", "OutsideVolumeLoss", "Placement", "Polish", "ProposalSource", "RandomPool", "Refine",
-    "Repeat", "Report", "ResidualProposals", "ScoreAll", "SelectionConfig", "Shortlist", "SizeRange", "SparseResult",
-    "Stage", "Step", "SurfaceFScoreConfig", "SurfaceFScoreLoss", "Swaps", "TransformConstraints",
-    "UncoveredSurfaceConfig", "UncoveredSurfaceLoss", "UncoveredVolumeConfig", "UncoveredVolumeLoss", "VoxelGridConfig",
-    "load_catalog", "prepare_mesh", "resize_mesh",
+    "Loss", "LossConfig", "LossSession", "LossTerm", "MedialChains", "MeshItem", "MeshLoader", "MeshProcessor", "Moves",
+    "Nudges", "OutsideVolumeConfig", "OutsideVolumeLoss", "Placement", "Polish", "ProposalSource", "RandomPool",
+    "Refine", "Repeat", "Report", "ResidualProposals", "ScoreAll", "SelectionConfig", "Shortlist", "SizeRange",
+    "SparseResult", "Stage", "Step", "SurfaceChains", "SurfaceFScoreConfig", "SurfaceFScoreLoss", "Swaps",
+    "TransformConstraints", "UncoveredSurfaceConfig", "UncoveredSurfaceLoss", "UncoveredVolumeConfig",
+    "UncoveredVolumeLoss", "VoxelGridConfig", "load_catalog", "prepare_mesh", "resize_mesh",
 ]

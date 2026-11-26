@@ -14,6 +14,13 @@ class GridSettings(Config):
         return VoxelGrid.from_mesh(target, self.grid)
 
 
+class PathSettings(GridSettings):
+    path_grid: Optional[VoxelGridConfig] = None
+
+    def path_voxel_grid(self, target):
+        return VoxelGrid.from_mesh(target, self.grid if self.path_grid is None else self.path_grid)
+
+
 class SurfaceSettings(GridSettings):
     surface_tolerance: Optional[NonNegativeFloat] = None
 
