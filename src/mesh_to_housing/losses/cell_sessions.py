@@ -23,6 +23,10 @@ class CellCounts:
         self._counts = np.zeros(0, dtype=np.int64)
         self.changes: list[tuple[CellKeys, int]] = []
 
+    @property
+    def repeats(self) -> int:
+        return int(self._counts.sum()) - len(self.keys)
+
     def weight(self, keys: CellKeys) -> float:
         return float(len(keys)) if self.weights is None else float(self.weights(keys).sum())
 
@@ -71,8 +75,8 @@ class CellSession(LossSession):
         return _CellScorer(self, placements)
 
     @abstractmethod
-    def _gains(self, new_weights: np.ndarray) -> np.ndarray:
-        """Turn the weight of the new cells each candidate would score into its gain."""
+    def _gains(self, new_weights: np.ndarray, totals: np.ndarray) -> np.ndarray:
+        """Score candidates from their new and total cell weights."""
 
     def _cells(self, placement):
         cells = self._cells_by_placement.get(placement)
@@ -94,7 +98,7 @@ class CoverageSession(CellSession):
     def gain(self, placement):
         return self._new_weight(placement) / self._reference
 
-    def _gains(self, new_weights):
+    def _gains(self, new_weights, totals):
         return new_weights / self._reference
 
 
@@ -107,8 +111,24 @@ class PenaltySession(CellSession):
     def gain(self, placement):
         return -(self._new_weight(placement) / self._reference)
 
-    def _gains(self, new_weights):
+    def _gains(self, new_weights, totals):
         return -(new_weights / self._reference)
+
+
+class OverlapSession(CellSession):
+    """Penalizes each extra placement that scores a cell."""
+
+    def __init__(self, cells_of: CellsOf, reference: float):
+        super().__init__(cells_of, reference)
+
+    def value(self):
+        return self._scored.repeats / self._reference
+
+    def gain(self, placement):
+        return -(len(self._cells(placement)) - self._new_weight(placement)) / self._reference
+
+    def _gains(self, new_weights, totals):
+        return -((totals - new_weights) / self._reference)
 
 
 class _CellScorer(CandidateScorer):
@@ -120,7 +140,8 @@ class _CellScorer(CandidateScorer):
         self._session = session
         scored = session._scored
         self._holders = holders = CellHolders(session._cells_of(placements), len(placements))
-        self._new_weights = holders.totals(scored.weights) - holders.counts(scored.keys, scored.weights)
+        self._totals = holders.totals(scored.weights)
+        self._new_weights = self._totals - holders.counts(scored.keys, scored.weights)
         self._seen = len(scored.changes)
 
     def gains(self):
@@ -128,7 +149,7 @@ class _CellScorer(CandidateScorer):
         for keys, step in scored.changes[self._seen:]:
             self._new_weights = self._new_weights - step * self._holders.counts(keys, scored.weights)
         self._seen = len(scored.changes)
-        return self._session._gains(self._new_weights)
+        return self._session._gains(self._new_weights, self._totals)
 
 
 def _found(sorted_keys, keys, position):
