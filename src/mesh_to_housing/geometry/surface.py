@@ -3,8 +3,13 @@ from math import ceil
 
 import numpy as np
 
+from .blur import BlurredSolid
 from .cells import CellBox, CellKeys, cell_indices, cell_keys
 from .morphology import ball_mask
+
+_GRAIN_SMOOTHING = 3.0
+# Room for the whole blur, which gaussian_filter cuts off at four widths.
+_GRAIN_PADDING = ceil(4 * _GRAIN_SMOOTHING)
 
 
 class TargetSurface:
@@ -43,7 +48,7 @@ class TargetSurface:
 
             grid = self._grid
             reach = ceil(radius / grid.pitch)
-            box = CellBox(grid.box.low - reach, grid.box.low + grid.box.shape - 1 + reach)
+            box = grid.box.padded(reach)
             grown = binary_dilation(np.pad(self.mask, reach), structure=ball_mask(grid.pitch, radius))
             self._near_masks[radius] = box, grown
         box, grown = self._near_masks[radius]
@@ -56,6 +61,23 @@ class TargetSurface:
     @cached_property
     def normals(self) -> np.ndarray:
         return self._grid.outward_normals(self.indices)
+
+    def grain_at(self, points: np.ndarray, normals: np.ndarray,
+                 contrast: float = 0.25) -> tuple[np.ndarray, np.ndarray]:
+        """Unit directions along the surface in which it bends least"""
+        cells = self._grain_box.clipped(self._grid.indices_of(np.asarray(points, dtype=float).reshape(-1, 3)))
+        hessian = self._blurred.bending_at(cells)
+        across = np.eye(3) - normals[:, :, None] * normals[:, None, :]
+        values, vectors = np.linalg.eigh(across @ hessian @ across)
+        normal_like = np.argmax(np.abs(np.einsum("nij,ni->nj", vectors, normals)), axis=1)
+        rows = np.arange(len(normals))
+        keep = np.array([[column for column in range(3) if column != skip] for skip in normal_like])
+        bends = np.abs(values[rows[:, None], keep])
+        least = keep[rows, np.argmin(bends, axis=1)]
+        difference = np.abs(bends[:, 0] - bends[:, 1])
+        slope = np.linalg.norm(self._blurred.slope_at(cells), axis=1)
+        curved = difference >= slope / max(self._grid.box.shape)
+        return vectors[rows, :, least], curved & (difference >= contrast * np.maximum(bends.sum(axis=1), 1e-12))
 
     def thickness(self, radius: float) -> np.ndarray:
         """How thick the target is around each surface cell, in target units. It finds the deepest point inside the
@@ -86,6 +108,21 @@ class TargetSurface:
         1 as it gets thinner.
         """
         return np.clip(1.0 - self.thickness(radius) / (2 * radius), 0.0, 1.0)
+
+    @cached_property
+    def tree(self):
+        """A search tree over the centers of the surface cells."""
+        from scipy.spatial import cKDTree
+
+        return cKDTree(self._grid.points_of(self.indices))
+
+    @cached_property
+    def _grain_box(self) -> CellBox:
+        return self._grid.box.padded(_GRAIN_PADDING)
+
+    @cached_property
+    def _blurred(self) -> BlurredSolid:
+        return BlurredSolid(np.pad(self._grid.solid_mask, _GRAIN_PADDING), _GRAIN_SMOOTHING)
 
     @cached_property
     def points(self) -> np.ndarray:
