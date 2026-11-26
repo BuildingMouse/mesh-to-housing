@@ -1,8 +1,8 @@
 from .pipeline.processor import MeshProcessor, SparseResult
 from .fitting import (
-    CandidateSettings, Chain, ChainMoves, Fill, FittingPipeline, ItemKinds, ItemSettings, Link, MedialChains, Moves,
-    Nudges, Polish, ProposalSource, RandomPool, Refine, Repeat, Report, ResidualProposals, ScoreAll, SelectionConfig,
-    Shortlist, SizeRange, Stage, Step, SurfaceChains, Swaps,
+    CandidateSettings, Chain, ChainFill, ChainMoves, ChainPolish, Fill, FittingPipeline, ItemKinds, ItemSettings,
+    Link, MedialChains, Moves, Nudges, Polish, ProposalSource, RandomPool, Refine, Repeat, Report, ResidualProposals,
+    ScoreAll, SelectionConfig, Shortlist, SizeRange, Stage, Step, SurfaceChains, Swaps,
 )
 from .utils.config import Config, ConfigError
 from .construction import Construction
@@ -22,7 +22,8 @@ from .meshes.preparation import prepare_mesh, resize_mesh
 from .placement import Placement
 
 __all__ = [
-    "CandidateScorer", "CandidateSettings", "Chain", "ChainMoves", "ChamferDistanceConfig", "ChamferDistanceLoss",
+    "CandidateScorer", "CandidateSettings", "Chain", "ChainFill", "ChainMoves", "ChainPolish", "ChamferDistanceConfig",
+    "ChamferDistanceLoss",
     "CombinedLoss", "CombinedLossConfig", "Config", "ConfigError", "Construction", "Cuboid", "ExcessRoughnessConfig",
     "ExcessRoughnessLoss", "ExcessSurfaceConfig", "ExcessSurfaceLoss", "Execution", "Fill", "FittingPipeline",
     "FittingTask", "HausdorffDistanceConfig", "HausdorffDistanceLoss", "Item", "ItemKinds", "ItemOverlapConfig",

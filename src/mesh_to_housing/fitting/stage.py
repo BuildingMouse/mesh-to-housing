@@ -6,6 +6,7 @@ from pydantic import Discriminator, Tag, model_serializer, model_validator
 
 from ..utils.config import Config
 from ..utils.values import Fraction, PositiveInt
+from .chain_steps import ChainFill, ChainPolish
 from .filters import FilterConfigs
 from .selection import SelectionConfigs
 from .state import FitState, Scope
@@ -141,6 +142,7 @@ def _kind(value: Any) -> Optional[str]:
 
 StepConfigs = Annotated[
     Union[Annotated[Fill, Tag("fill")], Annotated[Refine, Tag("refine")], Annotated[Polish, Tag("polish")],
+          Annotated[ChainFill, Tag("chain_fill")], Annotated[ChainPolish, Tag("chain_polish")],
           Annotated[Stage, Tag("stage")], Annotated[Repeat, Tag("repeat")]],
     Discriminator(_kind),
 ]

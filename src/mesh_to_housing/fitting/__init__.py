@@ -1,4 +1,5 @@
 from .chain import Chain, ChainGroup, Link
+from .chain_steps import ChainFill, ChainPolish
 from .filters import CandidateFilter, FilterConfigs, ItemKinds, SizeRange
 from .moves import ChainMoves, MoveConfigs, Moves, Nudges, Swaps
 from .pipeline import FittingPipeline
@@ -12,7 +13,8 @@ from .state import FitState, Scope
 from .steps import Fill, Polish, Refine, Step
 
 __all__ = [
-    "CandidateFilter", "CandidateGroup", "CandidateSettings", "Chain", "ChainGroup", "ChainMoves", "ChainSource",
+    "CandidateFilter", "CandidateGroup", "CandidateSettings", "Chain", "ChainFill", "ChainGroup", "ChainMoves",
+    "ChainPolish", "ChainSource",
     "Fill", "FilterConfigs", "FitState", "FittingPipeline", "ItemKinds", "ItemSettings", "Link", "MedialChains",
     "MoveConfigs", "Moves", "Nudges", "Polish", "ProposalConfigs", "ProposalSource", "RandomPool", "Refine", "Repeat",
     "Report", "ResidualProposals", "Scope", "ScoreAll", "SelectionConfig", "SelectionConfigs", "Selector", "Shortlist",
