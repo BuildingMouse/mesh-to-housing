@@ -1,30 +1,18 @@
-from typing import Annotated, List, Literal, Sequence
+from typing import List, Literal, Sequence
 
 import numpy as np
-from pydantic import Field
 
-from ...utils.config import Config
-from ...utils.values import NonNegativeFloat
-from ...geometry.voxel_grid import VoxelGridConfig
 from ...placement import Placement
 from ...task import FittingTask
-from .base import Moves
+from .base import MoveSizes, Moves
 
 
-class Nudges(Config, Moves):
+class Nudges(MoveSizes, Moves):
     """Small moves of one placement: shifts along and turns about its own axes, and a slightly larger and
     smaller scale.
     """
 
     type: Literal["nudges"] = "nudges"
-    shift: NonNegativeFloat = 1.0
-    turn: NonNegativeFloat = 10.0
-    rescale: Annotated[float, Field(ge=1, allow_inf_nan=False)] = 1.15
-    grid: VoxelGridConfig = Field(default_factory=VoxelGridConfig)
-
-    def finer(self, factor: float) -> "Nudges":
-        return self.model_copy(update=dict(shift=self.shift * factor, turn=self.turn * factor,
-                                           rescale=1 + (self.rescale - 1) * factor))
 
     def around(self, task: FittingTask, placement: Placement, placements: Sequence[Placement] = ()) -> List[Placement]:
         from scipy.spatial.transform import Rotation

@@ -4,16 +4,16 @@ import pytest
 import trimesh
 
 from mesh_to_housing import (
-    CandidateSettings, Cuboid, Fill, FittingPipeline, FittingTask, MedialChains, MeshItem, Stage, SurfaceChains,
+    CandidateSettings, Fill, FittingPipeline, FittingTask, MedialChains, MeshItem, Stage, SurfaceChains,
     TransformConstraints, UncoveredSurfaceConfig, VoxelGridConfig,
 )
 from mesh_to_housing.geometry.rotations import side_and_up
 from mesh_to_housing.geometry.voxel_grid import VoxelGrid
 
+from ..chains import COLUMN
 from ..meshes import table_mesh, taper_mesh
 from ..reference import sampled_cells
 
-COLUMN = Cuboid("column", (0.2, 0.2, 0.8))
 BALL = MeshItem("ball", trimesh.creation.icosphere(subdivisions=3, radius=0.5))
 CYLINDER = MeshItem("cylinder", trimesh.creation.cylinder(radius=0.15, height=1.0, sections=48))
 TABLE = MeshItem("table", table_mesh())

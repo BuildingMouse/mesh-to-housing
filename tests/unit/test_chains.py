@@ -6,14 +6,12 @@ import pytest
 import trimesh
 from scipy.spatial.transform import Rotation
 
-from mesh_to_housing import Chain, Cuboid, Link, MeshItem
+from mesh_to_housing import Link, MeshItem
 from mesh_to_housing.fitting import ChainGroup
 
+from ..chains import COLUMN, LINK, straight_chain
 from ..meshes import dome_mesh, flat_top_mesh, l_mesh, table_mesh
 
-COLUMN = Cuboid("column", (0.2, 0.2, 0.8))
-LINK = Link(COLUMN, COLUMN.shape.pose("long along, +thin up"), "middle", overlap=0.1, max_bend=30.0,
-            max_overlap=0.35)
 MESHES = {
     "cylinder": trimesh.creation.cylinder(radius=0.15, height=1.0, sections=32),
     "ring": trimesh.creation.annulus(r_min=0.3, r_max=0.45, height=0.1),
@@ -22,12 +20,6 @@ MESHES = {
     "table": table_mesh(),
     "flat top": flat_top_mesh(),
 }
-
-
-def straight_chain(count=3, scale=1.0, link=LINK):
-    span = 0.8 * scale * 0.9
-    joints = np.column_stack((np.arange(count + 1) * span, np.zeros(count + 1), np.zeros(count + 1)))
-    return Chain(link, joints, np.tile((0.0, 0.0, 1.0), (count, 1)), np.full(count, scale))
 
 
 @pytest.mark.parametrize("name", MESHES)
