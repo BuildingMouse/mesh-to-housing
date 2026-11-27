@@ -1,9 +1,15 @@
-from .base import CoverageSession, PenaltySession, SurfaceToleranceConfig, VoxelLoss, VoxelLossConfig
-from .surface import ExcessSurfaceConfig, ExcessSurfaceLoss, UncoveredSurfaceConfig, UncoveredSurfaceLoss
+from .base import CoverageSession, PenaltySession, SurfaceToleranceConfig, VoxelLossConfig
+from .surface import (
+    ChamferDistanceConfig, ChamferDistanceLoss, ExcessRoughnessConfig, ExcessRoughnessLoss, ExcessSurfaceConfig,
+    ExcessSurfaceLoss, HausdorffDistanceConfig, HausdorffDistanceLoss, SurfaceFScoreConfig, SurfaceFScoreLoss,
+    UncoveredSurfaceConfig, UncoveredSurfaceLoss,
+)
 from .volume import OutsideVolumeConfig, OutsideVolumeLoss, UncoveredVolumeConfig, UncoveredVolumeLoss
 
 __all__ = [
-    "CoverageSession", "ExcessSurfaceConfig", "ExcessSurfaceLoss", "OutsideVolumeConfig", "OutsideVolumeLoss",
-    "PenaltySession", "SurfaceToleranceConfig", "UncoveredSurfaceConfig",
-    "UncoveredSurfaceLoss", "UncoveredVolumeConfig", "UncoveredVolumeLoss", "VoxelLoss", "VoxelLossConfig",
+    "ChamferDistanceConfig", "ChamferDistanceLoss", "CoverageSession", "ExcessRoughnessConfig", "ExcessRoughnessLoss",
+    "ExcessSurfaceConfig", "ExcessSurfaceLoss", "HausdorffDistanceConfig", "HausdorffDistanceLoss",
+    "OutsideVolumeConfig", "OutsideVolumeLoss", "PenaltySession", "SurfaceFScoreConfig", "SurfaceFScoreLoss",
+    "SurfaceToleranceConfig", "UncoveredSurfaceConfig", "UncoveredSurfaceLoss", "UncoveredVolumeConfig",
+    "UncoveredVolumeLoss", "VoxelLossConfig",
 ]

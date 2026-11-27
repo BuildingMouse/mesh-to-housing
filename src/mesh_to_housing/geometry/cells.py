@@ -6,6 +6,8 @@ import numpy as np
 
 # Sorted int64 cell keys. Many cell sets are usually passed as a list of these, one per placement or candidate.
 CellKeys = np.ndarray
+# A function that returns the weight of each cell it's given.
+CellWeights = Callable[[CellKeys], np.ndarray]
 
 _BITS = 20
 _OFFSET = 1 << (_BITS - 1)
@@ -149,16 +151,30 @@ class CellHolders:
             self._holders[free[numbers] + np.arange(len(numbers)) - np.repeat(first, runs)] = holders
             free[numbers[first]] += runs
 
-    def counts(self, keys: CellKeys) -> np.ndarray:
-        """How many of these distinct keys each candidate holds."""
+    def counts(self, keys: CellKeys, weights: Optional[CellWeights] = None) -> np.ndarray:
+        """For each candidate, how many of these distinct cells it holds, or their total weight when weights are
+        given.
+        """
         if self.box is None:
-            return np.zeros(self.count, dtype=np.int64)
+            return np.zeros(self.count, dtype=np.int64 if weights is None else float)
         numbers = self.box.numbers(keys)
-        numbers = numbers[numbers >= 0]
+        inside = numbers >= 0
+        numbers = numbers[inside]
         starts = self._starts[numbers]
         sizes = self._starts[numbers + 1] - starts
         positions = np.repeat(starts - (np.cumsum(sizes) - sizes), sizes) + np.arange(sizes.sum())
-        return np.bincount(self._holders[positions], minlength=self.count)
+        if weights is None:
+            return np.bincount(self._holders[positions], minlength=self.count)
+        return np.bincount(self._holders[positions], weights=np.repeat(weights(keys[inside]), sizes),
+                           minlength=self.count)
+
+    def totals(self, weights: Optional[CellWeights] = None) -> np.ndarray:
+        """For each candidate, how many cells it holds, or their total weight when weights are given."""
+        if weights is None:
+            return self.lengths
+        if self.box is None:
+            return np.zeros(self.count)
+        return self.counts(self.box.keys(np.flatnonzero(np.diff(self._starts))), weights)
 
 
 def _index_type(size: int):

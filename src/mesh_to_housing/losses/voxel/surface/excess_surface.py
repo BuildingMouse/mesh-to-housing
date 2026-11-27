@@ -1,9 +1,9 @@
 from typing import Literal
 
 from ....geometry.cells import select_keys
-from ...base import implements
+from ...base import IncrementalLoss, implements
 from ...cell_sessions import PenaltySession
-from ..base import SurfaceToleranceConfig, VoxelLoss
+from ..base import SurfaceToleranceConfig
 
 
 class ExcessSurfaceConfig(SurfaceToleranceConfig):
@@ -11,9 +11,9 @@ class ExcessSurfaceConfig(SurfaceToleranceConfig):
 
 
 @implements(ExcessSurfaceConfig)
-class ExcessSurfaceLoss(VoxelLoss):
+class ExcessSurfaceLoss(IncrementalLoss):
     def session(self, target):
-        grid = self.grid(target)
+        grid = self.config.voxel_grid(target)
         tolerance = self.config.tolerance_for(target)
 
         def standing_off(placements):

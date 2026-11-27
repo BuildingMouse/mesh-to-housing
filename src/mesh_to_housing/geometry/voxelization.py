@@ -35,7 +35,8 @@ def voxelize(mesh: trimesh.Trimesh, config: VoxelGridConfig) -> VoxelGrid:
     thick = maximum_filter(minimum_filter(solid, size=2 * samples + 1), size=2 * samples + 1)
     thin_amount = _cell_blocks(solid, samples).sum(axis=(1, 3, 5)) * ~_cell_blocks(thick, samples).any(axis=(1, 3, 5))
     holds_thin_part = (thin_amount > 0) & (2 * thin_amount >= maximum_filter(thin_amount, size=3))
-    indices = np.argwhere(half_filled | holds_thin_part)
+    # Rounding to cells can leave a few empty cells walled in, which the target's outer surface shouldn't show.
+    indices = np.argwhere(binary_fill_holes(half_filled | holds_thin_part))
     origin = corner + ((samples - 1) / 2 - padding) * fine_pitch
     return VoxelGrid(indices, fine_pitch * samples, origin, config)
 

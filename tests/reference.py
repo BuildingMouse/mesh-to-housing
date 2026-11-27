@@ -2,6 +2,7 @@
 from math import ceil
 
 import numpy as np
+import pytest
 
 from mesh_to_housing.geometry.cells import cell_indices
 
@@ -37,3 +38,27 @@ def expanded(cells, pitch, tolerance):
     offsets = np.indices((2 * reach + 1,) * 3).reshape(3, -1).T - reach
     offsets = offsets[np.linalg.norm(offsets, axis=1) * pitch <= tolerance]
     return frozenset(tuple(np.asarray(cell) + offset) for cell in cells for offset in offsets)
+
+
+ADD_AND_REMOVE = [(True, 0), (True, 2), (True, 1), (False, 0), (True, 4), (False, 2), (False, 1), (False, 4)]
+
+
+def follow(session, placements, counted, reference, penalty=False, weigh=len):
+    """Add and remove placements in a fixed order. After each step, check the session's value and every candidate's
+    gain against set arithmetic on the cells that counted gives for each placement, weighed by weigh.
+    """
+    scorer = session.scorer(placements)
+    placed = []
+    for adding, index in ADD_AND_REMOVE:
+        if adding:
+            placed.append(placements[index])
+            session.add(placements[index])
+        else:
+            placed.remove(placements[index])
+            session.remove(placements[index])
+        union = frozenset().union(*(counted(placement) for placement in placed))
+        share = weigh(union) / reference
+        assert session.value() == pytest.approx(share if penalty else 1.0 - share, abs=1e-12)
+        gains = [(-1 if penalty else 1) * weigh(counted(placement) - union) / reference for placement in placements]
+        np.testing.assert_allclose(scorer.gains(), gains, atol=1e-12, rtol=0)
+        np.testing.assert_allclose([session.gain(placement) for placement in placements], gains, atol=1e-12, rtol=0)

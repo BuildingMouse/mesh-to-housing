@@ -1,4 +1,13 @@
+from .excess_roughness import ExcessRoughnessConfig, ExcessRoughnessLoss
 from .excess_surface import ExcessSurfaceConfig, ExcessSurfaceLoss
+from .surface_distance import (
+    ChamferDistanceConfig, ChamferDistanceLoss, HausdorffDistanceConfig, HausdorffDistanceLoss,
+)
+from .surface_fscore import SurfaceFScoreConfig, SurfaceFScoreLoss
 from .uncovered_surface import UncoveredSurfaceConfig, UncoveredSurfaceLoss
 
-__all__ = ["ExcessSurfaceConfig", "ExcessSurfaceLoss", "UncoveredSurfaceConfig", "UncoveredSurfaceLoss"]
+__all__ = [
+    "ChamferDistanceConfig", "ChamferDistanceLoss", "ExcessRoughnessConfig", "ExcessRoughnessLoss",
+    "ExcessSurfaceConfig", "ExcessSurfaceLoss", "HausdorffDistanceConfig", "HausdorffDistanceLoss",
+    "SurfaceFScoreConfig", "SurfaceFScoreLoss", "UncoveredSurfaceConfig", "UncoveredSurfaceLoss",
+]

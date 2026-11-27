@@ -1,8 +1,12 @@
+from pathlib import Path
+
 import numpy as np
 import pytest
 import trimesh
 
+from mesh_to_housing import VoxelGridConfig
 from mesh_to_housing.geometry.cells import cell_keys
+from mesh_to_housing.geometry.voxel_grid import VoxelGrid
 from mesh_to_housing.geometry.voxelization import _surface_voxels
 
 
@@ -22,3 +26,12 @@ def test_outside_distance_matches_the_nearest_target_cell(grid):
     cells = rng.integers(grid.box.low - 45, grid.box.low + grid.box.shape + 45, (500, 3))
     nearest = np.linalg.norm(cells[:, None, :] - grid.indices[None, :, :], axis=2).min(axis=1)
     np.testing.assert_allclose(grid.outside_distance(cell_keys(cells)), nearest * grid.pitch, rtol=0, atol=1e-12)
+
+
+def test_rounding_to_cells_leaves_no_empty_cells_walled_in():
+    from scipy.ndimage import binary_fill_holes
+
+    # At this resolution, rounding to cells walls in two empty cells inside the raven unless they are filled.
+    raven = trimesh.load(Path(__file__).parents[2] / "mesh-assets/prepared/raven.ply")
+    grid = VoxelGrid.from_mesh(raven, VoxelGridConfig(resolution=64))
+    np.testing.assert_array_equal(binary_fill_holes(grid.solid_mask), grid.solid_mask)

@@ -64,6 +64,15 @@ class VoxelGrid:
         solid[tuple((self.indices - self.box.low).T)] = True
         return solid
 
+    @cached_property
+    def inner_depth(self) -> np.ndarray:
+        """How deep each cell lies inside the target, counted in cells. Cells outside are 0, and the target's outer
+        layer is 1.
+        """
+        from scipy.ndimage import distance_transform_edt
+
+        return distance_transform_edt(np.pad(self.solid_mask, 1))[1:-1, 1:-1, 1:-1]
+
     def in_target(self, keys: CellKeys) -> np.ndarray:
         return self.box.lookup(self.solid_mask, keys)
 
@@ -79,20 +88,10 @@ class VoxelGrid:
         return distances
 
     def outward_normals(self, indices: np.ndarray) -> np.ndarray:
-        """Outward unit normals at the given target cells"""
-        from scipy.ndimage import gaussian_filter
+        """Outward unit normals at the given target cells."""
+        from .surface import solid_normals
 
-        low = self.indices.min(axis=0) - 2
-        solid = np.zeros(self.indices.max(axis=0) - low + 3)
-        solid[tuple((self.indices - low).T)] = 1.0
-        blurred = gaussian_filter(solid, sigma=1.0)
-        del solid
-        local = np.asarray(indices, dtype=int).reshape(-1, 3) - low
-        # The central differences np.gradient takes, only at these cells; the padding keeps them off the edges.
-        normals = -np.stack([(blurred[tuple((local + step).T)] - blurred[tuple((local - step).T)]) / 2.0
-                             for step in np.eye(3, dtype=int)], axis=1)
-        lengths = np.linalg.norm(normals, axis=1, keepdims=True)
-        return np.where(lengths > 0, normals / np.where(lengths > 0, lengths, 1), (0.0, 0.0, 1.0))
+        return solid_normals(self.solid_mask, np.asarray(indices, dtype=int).reshape(-1, 3) - self.box.low)
 
     @cached_property
     def surface(self) -> "TargetSurface":

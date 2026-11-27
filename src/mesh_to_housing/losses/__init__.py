@@ -6,22 +6,26 @@ from .base import CandidateScorer, IncrementalLoss, Loss, LossConfig, LossSessio
 from .combined import CombinedLoss, CombinedLossConfig, LossTerm
 from .sessions import FullEvaluationSession
 from .voxel import (
-    ExcessSurfaceConfig, ExcessSurfaceLoss, OutsideVolumeConfig, OutsideVolumeLoss,
-    UncoveredSurfaceConfig, UncoveredSurfaceLoss, UncoveredVolumeConfig,
+    ChamferDistanceConfig, ChamferDistanceLoss, ExcessRoughnessConfig, ExcessRoughnessLoss, ExcessSurfaceConfig,
+    ExcessSurfaceLoss, HausdorffDistanceConfig, HausdorffDistanceLoss, OutsideVolumeConfig, OutsideVolumeLoss,
+    SurfaceFScoreConfig, SurfaceFScoreLoss, UncoveredSurfaceConfig, UncoveredSurfaceLoss, UncoveredVolumeConfig,
     UncoveredVolumeLoss,
 )
 
 LossConfigs = Annotated[
-    Union[CombinedLossConfig, ExcessSurfaceConfig, OutsideVolumeConfig, UncoveredSurfaceConfig, UncoveredVolumeConfig],
+    Union[
+        ChamferDistanceConfig, CombinedLossConfig, ExcessRoughnessConfig, ExcessSurfaceConfig, HausdorffDistanceConfig,
+        OutsideVolumeConfig, SurfaceFScoreConfig, UncoveredSurfaceConfig, UncoveredVolumeConfig,
+    ],
     Field(discriminator="type"),
 ]
 LossTerm.model_rebuild()
 CombinedLossConfig.model_rebuild()
 
 __all__ = [
-    "CandidateScorer", "CombinedLoss", "CombinedLossConfig", "FullEvaluationSession", "IncrementalLoss", "Loss",
-    "LossConfig", "LossConfigs", "LossSession", "LossTerm",
-    "ExcessSurfaceConfig", "ExcessSurfaceLoss",
-    "OutsideVolumeConfig", "OutsideVolumeLoss", "UncoveredSurfaceConfig", "UncoveredSurfaceLoss",
-    "UncoveredVolumeConfig", "UncoveredVolumeLoss", "implements",
+    "CandidateScorer", "ChamferDistanceConfig", "ChamferDistanceLoss", "CombinedLoss", "CombinedLossConfig",
+    "ExcessRoughnessConfig", "ExcessRoughnessLoss", "ExcessSurfaceConfig", "ExcessSurfaceLoss", "FullEvaluationSession",
+    "HausdorffDistanceConfig", "HausdorffDistanceLoss", "IncrementalLoss", "Loss", "LossConfig", "LossConfigs",
+    "LossSession", "LossTerm", "OutsideVolumeConfig", "OutsideVolumeLoss", "SurfaceFScoreConfig", "SurfaceFScoreLoss",
+    "UncoveredSurfaceConfig", "UncoveredSurfaceLoss", "UncoveredVolumeConfig", "UncoveredVolumeLoss", "implements",
 ]
