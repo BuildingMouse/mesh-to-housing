@@ -108,7 +108,8 @@ def surface_path(grid: "VoxelGrid", point: np.ndarray, heading: Optional[np.ndar
 def on_surface(grid: "VoxelGrid", point: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     surface = grid.surface
     distances, nearest = surface.tree.query(point, k=24)
-    weights = np.exp(-0.5 * (distances / grid.pitch) ** 2)
+    # Measured from the nearest point, so the weights don't all round to zero far from the surface.
+    weights = np.exp(-0.5 * (distances ** 2 - distances.min() ** 2) / grid.pitch ** 2)
     normal = unit(weights @ surface.normals[nearest])
     level = weights @ surface.tree.data[nearest] / weights.sum() + normal * grid.pitch / 4
     return point - normal * np.dot(point - level, normal), normal

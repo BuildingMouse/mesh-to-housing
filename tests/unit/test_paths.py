@@ -92,3 +92,10 @@ def test_points_go_onto_the_surface_a_quarter_cell_out_from_the_surface_cells():
     top = BOX.points_of(BOX.surface.indices)[:, 2].max()
     np.testing.assert_allclose(normal, (0.0, 0.0, 1.0), atol=1e-9)
     np.testing.assert_allclose(point, (0.3, 0.2, top + BOX.pitch / 4), atol=1e-9)
+
+
+def test_points_far_from_the_surface_still_go_onto_it():
+    point, normal = on_surface(BOX, np.array((0.3, 0.2, 20.0)))
+    top = BOX.points_of(BOX.surface.indices)[:, 2].max()
+    np.testing.assert_allclose(normal, (0.0, 0.0, 1.0), atol=1e-6)
+    np.testing.assert_allclose(point, (0.3, 0.2, top + BOX.pitch / 4), atol=1e-6)
