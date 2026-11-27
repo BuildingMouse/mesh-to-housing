@@ -1,6 +1,6 @@
 import numpy as np
 
-from mesh_to_housing.geometry.cells import CellHolders, cell_indices, cell_keys, key_offsets
+from mesh_to_housing.geometry.cells import CellBox, CellHolders, cell_indices, cell_keys, key_offsets
 from mesh_to_housing.geometry.morphology import dilate_each
 
 from ..reference import as_cells, expanded
@@ -17,6 +17,14 @@ def test_keys_round_trip_and_sort_like_cells():
 def test_adding_an_offset_key_shifts_cells():
     offset = np.array([7, -3, 250])
     np.testing.assert_array_equal(cell_keys(CELLS) + key_offsets(offset), cell_keys(CELLS + offset))
+
+
+def test_padded_boxes_grow_on_every_side_and_clip_cells_onto_their_edge():
+    box = CellBox(np.array((2, -1, 0)), np.array((4, 1, 0))).padded(1)
+    np.testing.assert_array_equal(box.low, (1, -2, -1))
+    np.testing.assert_array_equal(box.shape, (5, 5, 3))
+    cells = np.array([(1, -2, -1), (3, 0, 0), (9, -9, 0)])
+    np.testing.assert_array_equal(np.stack(box.clipped(cells), axis=1), [(0, 0, 0), (2, 2, 1), (4, 0, 1)])
 
 
 def test_cell_holders_count_the_keys_each_candidate_holds_across_chunks():

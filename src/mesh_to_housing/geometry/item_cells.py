@@ -41,6 +41,10 @@ class ItemCells:
         self._sample_on_workers(placements, patterns)
         return (patterns.occupied(placement) for placement in placements)
 
+    def occupied_by_any(self, placements: Sequence[Placement]) -> CellKeys:
+        keys = list(self.occupied_by_each(placements))
+        return np.unique(np.concatenate(keys)) if keys else np.zeros(0, dtype=np.int64)
+
     def skins_of_each(self, placements: Sequence[Placement]) -> Iterator[CellKeys]:
         """Each placement's skin, the outer layer of its cells, worked out one placement at a time as they are read."""
         placements = list(placements)

@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from functools import cached_property
 
 import numpy as np
 import trimesh
@@ -35,6 +36,12 @@ class Item(ABC):
         """The sides of the bounding box along the item's own axes."""
         low, high = self.bounds
         return high - low
+
+    @cached_property
+    def shape(self) -> "ItemShape":
+        from .shape import ItemShape
+
+        return ItemShape.of(self.mesh)
 
     def contains(self, points):
         if not self.mesh.is_watertight:

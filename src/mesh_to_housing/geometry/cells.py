@@ -81,6 +81,12 @@ class CellBox:
         indices = cell_indices(keys)
         return cls(indices.min(axis=0), indices.max(axis=0))
 
+    def padded(self, cells: int) -> "CellBox":
+        return CellBox(self.low - cells, self.low + self.shape - 1 + cells)
+
+    def clipped(self, indices: np.ndarray) -> tuple[np.ndarray, ...]:
+        return tuple(np.clip(np.asarray(indices) - self.low, 0, self.shape - 1).T)
+
     def numbers(self, keys: CellKeys) -> np.ndarray:
         """The number of each cell in the box, or -1 for cells outside it."""
         local = cell_indices(keys) - self.low

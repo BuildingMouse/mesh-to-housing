@@ -49,6 +49,10 @@ class VoxelGrid:
         """The centers of cells given by index."""
         return self.origin + indices * self.pitch
 
+    def indices_of(self, points: np.ndarray) -> np.ndarray:
+        """The index of the cell around each point."""
+        return np.rint((np.asarray(points, dtype=float) - self.origin) / self.pitch).astype(int)
+
     @cached_property
     def keys(self) -> CellKeys:
         return np.sort(cell_keys(self.indices))
@@ -87,6 +91,9 @@ class VoxelGrid:
             distances[~inside] = self._target_tree.query(cell_indices(keys[~inside]))[0] * self.pitch
         return distances
 
+    def near_target(self, keys: CellKeys) -> np.ndarray:
+        return self.outside_distance(keys) <= self.pitch * (1 + 1e-9)
+
     def outward_normals(self, indices: np.ndarray) -> np.ndarray:
         """Outward unit normals at the given target cells."""
         from .surface import solid_normals
@@ -98,6 +105,12 @@ class VoxelGrid:
         from .surface import TargetSurface
 
         return TargetSurface(self)
+
+    @cached_property
+    def flow(self) -> "FlowField":
+        from .flow import FlowField
+
+        return FlowField(self)
 
     @cached_property
     def item_cells(self) -> "ItemCells":
@@ -123,8 +136,7 @@ class VoxelGrid:
             offsets -= np.arange(offsets.shape[axis], dtype=offsets.dtype).reshape(shape)
             offsets *= offsets
             squared += offsets
-        low = self.box.low - padding
-        return squared, CellBox(low, low + np.array(squared.shape) - 1)
+        return squared, self.box.padded(padding)
 
     @cached_property
     def _target_tree(self):
