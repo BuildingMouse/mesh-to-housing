@@ -106,6 +106,29 @@ def test_best_run_respects_the_budget_and_rejected_segments(gains, longest, expe
     assert total == pytest.approx(expected[1])
 
 
+@pytest.mark.parametrize("gains, cost, expected", [
+    ([3, -0.5, 0.6, 0.6, 0.6], None, ((0, 5), 4.3)),
+    ([3, -0.5, 0.6, 0.6, 0.6], 0.5, ((0, 1), 3)),
+    ([1, 1, 1, 0.1], 1, ((0, 3), 3)),
+    ([-1, 0], 1, (None, -np.inf)),
+])
+def test_with_a_cost_the_best_run_gains_the_most_per_segment(gains, cost, expected):
+    run, total = best_run(np.array(gains, dtype=float), 10, cost)
+    assert run == expected[0]
+    assert total == pytest.approx(expected[1])
+
+
+@pytest.mark.parametrize("chain_cost, expected", [(None, 4), (0.1, 1)])
+def test_a_chain_cost_weighs_what_a_chain_gains_against_the_items_it_takes(chain_task, chain_cost, expected):
+    weak = straight_chain(count=4)
+    strong = straight_chain(count=1, height=0.1)
+    values = {placement: 0.3 for placement in weak.placements} | {strong.placements[0]: 1.0}
+    state = state_for(chain_task, ScoreConfig(score=lambda placed: -sum(values[p] for p in placed)),
+                      {"chains": OfferedChains([weak, strong])})
+    ChainFill(chains=("chains",), items=4, chain_cost=chain_cost).run(state)
+    assert len(state.chains[0]) == expected
+
+
 @pytest.mark.parametrize("retries", [0, 2])
 def test_chain_fill_retries_when_no_chain_helps(chain_task, retries):
     source = OfferedChains()

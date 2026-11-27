@@ -26,6 +26,7 @@ class ChainFill(Config, Step):
     shortlist: PositiveInt = 8
     refresh_every: PositiveInt = 1
     retries: NonNegativeInt = 0
+    chain_cost: Optional[NonNegativeFloat] = None
 
     def proposals_used(self):
         return self.chains
@@ -68,23 +69,31 @@ class ChainFill(Config, Step):
         gains = offered.scored.available_gains()
         ranked = []
         for number, (group, start) in enumerate(zip(offered.groups, offered.starts)):
-            run, total = best_run(gains[start:start + len(group.primary)], room // len(group.members))
+            members = len(group.members)
+            run, total = best_run(gains[start:start + len(group.primary)], room // members, self.chain_cost)
             if run is not None and total > state.min_gain:
-                ranked.append((-total * len(group.members), number, run))
-        best, best_gain = None, state.min_gain
+                worth = self._worth(total * members, members, (run[1] - run[0]) * members)
+                ranked.append((-worth, number, run))
+        best, best_worth = None, -np.inf
         for _, number, (start, stop) in sorted(ranked)[:self.shortlist]:
             group = offered.groups[number]
+            members = len(group.members)
             steps = group.placements_by_segment[start:stop]
-            run, _ = best_run(state.marginal_gains(steps), room // len(group.members))
+            cost = None if self.chain_cost is None else self.chain_cost * members
+            run, _ = best_run(state.marginal_gains(steps), room // members, cost)
             whole = (0, len(steps))
             for first, last in [whole, *([run] if run is not None and run != whole else [])]:
                 trimmed = group.part(start + first, start + last)
                 if not state.allows(trimmed.placements):
                     continue
                 gain = state.change_gain((), trimmed.placements)
-                if gain > best_gain:
-                    best, best_gain = (number, trimmed), gain
+                worth = self._worth(gain, members, len(trimmed.placements))
+                if gain > state.min_gain and worth > best_worth:
+                    best, best_worth = (number, trimmed), worth
         return best
+
+    def _worth(self, gain: float, chains: int, items: int) -> float:
+        return gain if self.chain_cost is None else (gain - self.chain_cost * chains) / items
 
 
 class ChainPolish(Config, Step):
@@ -164,17 +173,24 @@ class _Offered:
         self.scored.taken[start:start + len(self.groups[number].primary)] = True
 
 
-def best_run(gains: np.ndarray, longest: int) -> tuple[Optional[tuple[int, int]], float]:
-    best, where = -np.inf, None
+def best_run(gains: np.ndarray, longest: int, cost: Optional[float] = None) -> tuple[Optional[tuple[int, int]], float]:
+    """The run of segments that gains the most, or with a cost, the most per segment after paying it. Also returns
+    the run's total gain.
+    """
+    best, where, where_total = -np.inf, None, -np.inf
     for start in range(len(gains)):
         total = 0.0
         for stop in range(start + 1, min(len(gains), start + longest) + 1):
             if np.isnan(gains[stop - 1]) or gains[stop - 1] == -np.inf:
                 break
             total += gains[stop - 1]
-            if total > best:
-                best, where = total, (start, stop)
-    return where, float(best)
+            if cost is None:
+                worth = total
+            else:
+                worth = (total - cost) / (stop - start) if total > 0 else -np.inf
+            if worth > best:
+                best, where, where_total = worth, (start, stop), total
+    return where, float(where_total)
 
 
 def _difference(old: Sequence[Placement], new: Sequence[Placement]) -> tuple[list[Placement], list[Placement]]:
