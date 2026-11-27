@@ -80,6 +80,14 @@ class VoxelGrid:
     def in_target(self, keys: CellKeys) -> np.ndarray:
         return self.box.lookup(self.solid_mask, keys)
 
+    def depth_of(self, keys: CellKeys) -> np.ndarray:
+        """Target depth in cells, with zero outside."""
+        numbers = self.box.numbers(keys)
+        depth = np.zeros(len(numbers))
+        inside = numbers >= 0
+        depth[inside] = self.inner_depth.ravel()[numbers[inside]]
+        return depth
+
     def outside_distance(self, keys: CellKeys) -> np.ndarray:
         """How far each cell is from the nearest target cell, in target units. Target cells are at 0."""
         squared_in_box, box = self._outside_field
