@@ -4,11 +4,15 @@ from .surface import (
     ExcessSurfaceLoss, HausdorffDistanceConfig, HausdorffDistanceLoss, SurfaceFScoreConfig, SurfaceFScoreLoss,
     UncoveredSurfaceConfig, UncoveredSurfaceLoss,
 )
-from .volume import OutsideVolumeConfig, OutsideVolumeLoss, UncoveredVolumeConfig, UncoveredVolumeLoss
+from .volume import (
+    ItemOverlapConfig, ItemOverlapLoss, OutsideVolumeConfig, OutsideVolumeLoss, UncoveredVolumeConfig,
+    UncoveredVolumeLoss,
+)
 
 __all__ = [
     "ChamferDistanceConfig", "ChamferDistanceLoss", "CoverageSession", "ExcessRoughnessConfig", "ExcessRoughnessLoss",
     "ExcessSurfaceConfig", "ExcessSurfaceLoss", "HausdorffDistanceConfig", "HausdorffDistanceLoss",
+    "ItemOverlapConfig", "ItemOverlapLoss",
     "OutsideVolumeConfig", "OutsideVolumeLoss", "PenaltySession", "SurfaceFScoreConfig", "SurfaceFScoreLoss",
     "SurfaceToleranceConfig", "UncoveredSurfaceConfig", "UncoveredSurfaceLoss", "UncoveredVolumeConfig",
     "UncoveredVolumeLoss", "VoxelLossConfig",
