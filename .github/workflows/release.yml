@@ -1,0 +1,27 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # the version is read from the tags
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python -m pip install build
+      - run: python -m build
+      - name: Check the built version matches the tag
+        run: test -f "dist/mesh_to_housing-${GITHUB_REF_NAME#v}-py3-none-any.whl"
+      - name: Publish the GitHub release
+        run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

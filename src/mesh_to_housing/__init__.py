@@ -1,3 +1,5 @@
+from importlib.metadata import version
+
 from .pipeline.processor import MeshProcessor, SparseResult
 from .fitting import (
     CandidateSettings, Chain, Fill, FittingPipeline, ItemKinds, ItemSettings, Link, MedialChains, Moves, Nudges, Polish,
@@ -20,6 +22,8 @@ from .losses import (
 from .meshes.loading import MeshLoader
 from .meshes.preparation import prepare_mesh, resize_mesh
 from .placement import Placement
+
+__version__ = version("mesh-to-housing")
 
 __all__ = [
     "CandidateScorer", "CandidateSettings", "Chain", "ChamferDistanceConfig", "ChamferDistanceLoss", "CombinedLoss",
